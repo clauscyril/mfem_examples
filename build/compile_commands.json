@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/cyril/Documents/MFEM/PremierProjet/build",
+  "command": "/usr/bin/g++  -isystem /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi -g -std=gnu++11 -o CMakeFiles/premierprojet.dir/main.cpp.o -c /home/cyril/Documents/MFEM/PremierProjet/main.cpp",
+  "file": "/home/cyril/Documents/MFEM/PremierProjet/main.cpp",
+  "output": "CMakeFiles/premierprojet.dir/main.cpp.o"
+}
+]
