@@ -1,3 +1,6 @@
 myenv/
 build/
 .vscode/
+test.cpp
+test2.cpp
+tests.txt

@@ -1,22 +1,31 @@
 #include <mfem.hpp>
 #include <iostream>
+#include <cmath>
 // #include <complex>
 
 using namespace mfem;
 using namespace std;
 
 ConstantCoefficient Hs = ConstantCoefficient(1.f);
-float e = 0.001;
+static real_t e = 0.001;
+
+static real_t sigma = 1e7;
+static real_t mu(100*4e-7*M_PI);
+static real_t omega = 2*M_PI*400;
 
 int main(int argc, char* argv[])
 {   
+    // Il faut passer deux arguments lors de l'execution du programme
     int n  = 4;       // Nombre d'éléments du maillage (4 par défaut)
     int order = 1;    // Ordre des fonctions de test (1 par défaut)  
+
+    cout << argc;
 
     if (argv[1]) {
         n = stoi(argv[1]);
     }
-    
+    cout << argv[2];
+
     if(argv[2]) {
         order = stoi(argv[2]);
     }
@@ -46,9 +55,7 @@ int main(int argc, char* argv[])
     b.Assemble();
     
     // Forme Bilinéaire 
-    static real_t sigma = 1e7;
-    static real_t mu(100*4e-7*M_PI);
-    static real_t omega = 2*M_PI*400;
+
     ConstantCoefficient facteur(sigma*mu*omega);
     ConstantCoefficient one(-1.0);
 
@@ -153,3 +160,14 @@ int main(int argc, char* argv[])
     return 0;
 }
 
+float u_ex(float z){
+    return 0.f;
+}
+
+// complex<real_t> u0_exact(const Vector &x){
+//     // int dim = x.Size();
+//     complex<real_t> i(0.0, 1.0);
+//     complex<real_t> A = (sqrt(-i * omega * sigma*mu));
+//     // return 1/sinh(A*e) * (sinh(A*e*0.5 + A * x));
+//     // return 
+// }
