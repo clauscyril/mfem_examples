@@ -25,6 +25,6 @@ int main(int argc, char* argv[])
         order = stoi(argv[2]);
     }
     // Création du maillage 
-    Mesh mesh =  Mesh::MakeCartesian1D(n, e);
+    Mesh mesh =  Mesh::MakeCartesian2D(n, n, Element::TRIANGLE,, true, 1, 1);
     return 0;
 }
