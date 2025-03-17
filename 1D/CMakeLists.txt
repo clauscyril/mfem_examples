@@ -7,6 +7,6 @@ set(CMAKE_CXX_STANDARD 11)
 
 find_package(MFEM REQUIRED)
 
-add_executable(premierprojet /home/cyril/Documents/MFEM/PremierProjet/main.cpp)
+add_executable(main main.cpp)
 # # target_link_libraries(premierprojet mfem ${MPI_LIBRARIES} HYPRE) 
-target_link_libraries(premierprojet mfem) 
+target_link_libraries(main mfem) 
