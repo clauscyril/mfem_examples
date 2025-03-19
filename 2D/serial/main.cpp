@@ -14,8 +14,6 @@ int main(int argc, char* argv[])
     int n  = 4;       // Nombre d'éléments du maillage (4 par défaut)
     int order = 1;    // Ordre des fonctions de test (1 par défaut)  
 
-    // cout << argc;
-
     if (argv[1]) {
         n = stoi(argv[1]);
     }
@@ -24,15 +22,20 @@ int main(int argc, char* argv[])
     if(argv[2]) {
         order = stoi(argv[2]);
     }
-    // Création du maillage 
-    Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
 
+
+    // Création du maillage (Maillage carré de nxn éléments, [0,1]x[0,1])
+    Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
+    // Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
+
+
+
+    
     ofstream mesh_ofs("refined.mesh");
     mesh_ofs.precision(8);
     mesh.Print(mesh_ofs);
 
-
-
+    cout << endl;
 
     // Affichage du maillage
     char vishost[] = "localhost";
