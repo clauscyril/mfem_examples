@@ -10,14 +10,13 @@ static real_t e = 0.001f;
 
 int main(int argc, char* argv[])
 {   
-    // Il faut passer deux arguments lors de l'execution du programme
-    int n  = 4;       // Nombre d'éléments du maillage (4 par défaut)
-    int order = 1;    // Ordre des fonctions de test (1 par défaut)  
+    // Il est nécessaire de passer deux arguments lors de l'execution du programme
+    int n;       // Nombre d'éléments du maillage
+    int order;    // Ordre des fonctions de test  
 
     if (argv[1]) {
         n = stoi(argv[1]);
     }
-    cout << argv[2];
 
     if(argv[2]) {
         order = stoi(argv[2]);
@@ -25,12 +24,38 @@ int main(int argc, char* argv[])
 
 
     // Création du maillage (Maillage carré de nxn éléments, [0,1]x[0,1])
-    Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
+    Mesh mesh = Mesh::MakeCartesian2D(n, floor(n/2), Element::TRIANGLE, true, 1, 1./2);
     // Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
 
+    mesh.UniformRefinement();
+    int ne = mesh.GetNE();
+    int dim = mesh.Dimension();
+    int spaceDim = mesh.SpaceDimension();
+
+    cout << "Nombre d'elements : " << ne << endl;
+
+    cout << "Dimension : " << dim << "\nSpaceDimension : " << spaceDim << endl;
 
 
-    
+    // Définition des espace d'élements finis
+    FiniteElementCollection *fec = new ND_FECollection(order, dim);     // On utilise les éléments finis de Nedelec
+    FiniteElementSpace *fespace = new FiniteElementSpace(&mesh, fec);
+    cout << "Number of finite element unknowns: "
+         << fespace->GetTrueVSize() << endl;
+
+
+    // Liste des dofs de bord
+    cout << "Taille bdr_attribute : " << mesh.bdr_attributes.Size() << endl;
+    Array<int> ess_tdof_list;
+    if (mesh.bdr_attributes.Size())
+    {
+        Array<int> ess_bdr(mesh.bdr_attributes.Max());
+        ess_bdr = 1;
+        fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+    }
+
+
+
     ofstream mesh_ofs("refined.mesh");
     mesh_ofs.precision(8);
     mesh.Print(mesh_ofs);
