@@ -7,6 +7,9 @@ using namespace mfem;
 
 static real_t e = 0.001f;
 real_t freq = 1.0, kappa;
+void E_exact(const Vector &x, Vector &E);
+void f_exact(const Vector &x, Vector &f);
+
 
 int main(int argc, char* argv[])
 {   
