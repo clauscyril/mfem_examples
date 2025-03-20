@@ -6,7 +6,7 @@ using namespace std;
 using namespace mfem;
 
 static real_t e = 0.001f;
-
+real_t freq = 1.0, kappa;
 
 int main(int argc, char* argv[])
 {   
@@ -22,6 +22,8 @@ int main(int argc, char* argv[])
         order = stoi(argv[2]);
     }
 
+
+    kappa = freq * M_PI;
 
     // Création du maillage (Maillage carré de nxn éléments, [0,1]x[0,1])
     Mesh mesh = Mesh::MakeCartesian2D(n, floor(n/2), Element::TRIANGLE, true, 1, 1./2);
@@ -46,15 +48,33 @@ int main(int argc, char* argv[])
 
     // Liste des dofs de bord
     cout << "Taille bdr_attribute : " << mesh.bdr_attributes.Size() << endl;
+
     Array<int> ess_tdof_list;
     if (mesh.bdr_attributes.Size())
     {
         Array<int> ess_bdr(mesh.bdr_attributes.Max());
-        ess_bdr = 1;
+        ess_bdr = 1; // On impose les conditions comme des conditions de dirichlet
+        cout << "ess_bdr : " << ess_bdr[0] << endl;
         fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
     }
 
+    // Définition de la forme linéaire B
+    VectorFunctionCoefficient f(spaceDim, f_exact);
+    LinearForm *b = new LinearForm(fespace);
+    b->AddDomainIntegrator(new VectorFEDomainLFIntegrator(f));
+    b->Assemble();
 
+
+    // Définition du vecteur solution comme un grid function liée à l'espace d'éléments finis
+    GridFunction x(fespace);
+    VectorFunctionCoefficient E(spaceDim, E_exact);
+    x.ProjectCoefficient(E);
+
+    // Forme bilinéaire
+    Coefficient *muinv = new ConstantCoefficient(1.f);
+    Coefficient *sigma = new ConstantCoefficient(1.f);
+    BilinearForm *a = new BilinearForm(fespace);
+    a->AddDomainIntegrator(new CurlCurlIntegrator(*muinv));
 
     ofstream mesh_ofs("refined.mesh");
     mesh_ofs.precision(8);
@@ -72,4 +92,20 @@ int main(int argc, char* argv[])
     sol_sock << "solution\n" << mesh << "window_title 'Mesh'";  // Génère une erreur dans glvis à corriger    
 
     return 0;
+}
+
+
+
+void E_exact(const Vector &x, Vector &E)
+{
+    E(0) = sin(kappa * x(1));
+    E(1) = sin(kappa * x(0));
+    if (x.Size() == 3) { E(2) = 0.0; }
+}
+
+void f_exact(const Vector &x, Vector &f)
+{
+    f(0) = (1. + kappa * kappa) * sin(kappa * x(1));
+    f(1) = (1. + kappa * kappa) * sin(kappa * x(0));
+    if (x.Size() == 3) { f(2) = 0.0; }  
 }
