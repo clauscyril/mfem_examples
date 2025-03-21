@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
     kappa = freq * M_PI;
 
     // Création du maillage (Maillage carré de nxn éléments, [0,1]x[0,1])
-    Mesh mesh = Mesh::MakeCartesian2D(n, floor(n/2), Element::TRIANGLE, true, 1, 1./2);
+    Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
     // Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
 
     mesh.UniformRefinement();
@@ -78,21 +78,41 @@ int main(int argc, char* argv[])
     Coefficient *sigma = new ConstantCoefficient(1.f);
     BilinearForm *a = new BilinearForm(fespace);
     a->AddDomainIntegrator(new CurlCurlIntegrator(*muinv));
+    a->AddDomainIntegrator(new VectorFEMassIntegrator(*sigma));
+    a->Assemble();
 
+
+    // Définition du système linéaire à résoudre
+    OperatorPtr A;
+    Vector B, X;
+    a->FormLinearSystem(ess_tdof_list, x, *b, A, X, B);
+
+    cout << "Taille du système linéaire : " << A->Height() << endl;
+
+    // Solver
+    GSSmoother M((SparseMatrix&)(*A));
+    PCG(*A, M, B, X, 1, 1000, 1e-12, 0.f);
+
+    // On récupère les solutions 
+    a->RecoverFEMSolution(X, *b, x);
+
+
+    // On sauvegarde le mesh 
     ofstream mesh_ofs("refined.mesh");
     mesh_ofs.precision(8);
     mesh.Print(mesh_ofs);
 
     cout << endl;
 
-    // Affichage du maillage
+    // Affichage de la solution avec glvis
     char vishost[] = "localhost";
     int  visport   = 19916;
     socketstream sol_sock(vishost, visport);
     // socketstream sol_sock_i(vishost, visport);
     sol_sock.precision(8);
     // sol_sock_i.precision(8);
-    sol_sock << "solution\n" << mesh << "window_title 'Mesh'";  // Génère une erreur dans glvis à corriger    
+    sol_sock << "solution\n" << mesh << x << "window_title 'Solution'"
+             << flush;  // Génère une erreur dans glvis à corriger    
 
     return 0;
 }
