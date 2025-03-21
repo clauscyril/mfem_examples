@@ -2,6 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
+"""
+
+Avant l'execution de ce script, il est impératif de faire attention de bien avoir compilé main.cpp
+et d'exécuter le programme 
+
+"""
 
 # Get mesh vertices coordinates
 Z = []
