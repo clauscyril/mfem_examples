@@ -1,11 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 
 # Get mesh vertices coordinates
 Z = []
 liste = []
-path = 'build/refined.mesh'
+path_dir = os.path.dirname(os.path.abspath(__file__))
+path = os.path.join(path_dir, 'build\\refined.mesh')
 with open(path, 'r', encoding='utf-8') as f:
     liste = f.readlines()
     for i, e in enumerate(liste):
@@ -18,7 +20,7 @@ Z = [float(e.replace("\n", "")) for e in Z]
 
 
 # Get solution
-paths = ["build/sol_i.gf", "build/sol_r.gf"]
+paths = [os.path.join(path_dir, "build/sol_i.gf"), os.path.join(path_dir, "build/sol_r.gf")]
 values = [[], []]
 
 for k,path in enumerate(paths):
