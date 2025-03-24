@@ -1,5 +1,6 @@
 #include <mfem.hpp>
 #include <iostream>
+#include <fstream>
 #include <cmath>
 
 using namespace std;
@@ -29,8 +30,12 @@ int main(int argc, char* argv[])
     kappa = freq * M_PI;
 
     // Création du maillage (Maillage carré de nxn éléments, [0,1]x[0,1])
-    Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
     // Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
+    // Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
+    Mesh mesh("D:/Documents/projets/MFEM/test.msh", 1, 1);
+    ofstream meshfile("disk_mfem.mesh");
+    mesh.Print(meshfile);
+
 
     mesh.UniformRefinement();
     int ne = mesh.GetNE();
