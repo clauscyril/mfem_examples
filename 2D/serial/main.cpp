@@ -32,7 +32,8 @@ int main(int argc, char* argv[])
     // Création du maillage (Maillage carré de nxn éléments, [0,1]x[0,1])
     // Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
     // Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
-    Mesh mesh("D:/Documents/projets/MFEM/test.msh", 1, 1);
+    const char *path = "D:/Documents/projets/MFEM/mfem_examples/2D/serial/data/test.msh";
+    Mesh mesh(path, 1, 1);
     ofstream meshfile("disk_mfem.mesh");
     mesh.Print(meshfile);
 
@@ -96,7 +97,7 @@ int main(int argc, char* argv[])
 
     // Solver
     GSSmoother M((SparseMatrix&)(*A));
-    PCG(*A, M, B, X, 1, 1000, 1e-12, 0.f);
+    PCG(*A, M, B, X, 1, 10000, 1e-12, 0.f);
 
     // On récupère les solutions 
     a->RecoverFEMSolution(X, *b, x);

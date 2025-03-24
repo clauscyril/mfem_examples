@@ -6,7 +6,7 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
-    const char *mesh_file = "D:/Documents/projets/MFEM/mfem_examples/2D/serial/data/mesh.msh";
+    const char *mesh_file = "D:/Documents/projets/MFEM/mfem_examples/2D/serial/data/test.msh";
     ifstream mesh_stream(mesh_file);
 
     if (!mesh_stream)
