@@ -26,13 +26,12 @@ int main(int argc, char* argv[])
         order = stoi(argv[2]);
     }
 
-
     kappa = freq * M_PI;
 
     // Création du maillage (Maillage carré de nxn éléments, [0,1]x[0,1])
     // Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
     // Mesh mesh = Mesh::MakeCartesian2D(n, n, Element::TRIANGLE, true, 1, 1);
-    const char *path = "D:/Documents/projets/MFEM/mfem_examples/2D/serial/data/test.msh";
+    const char *path = "D:/Documents/projets/MFEM/mfem_examples/2D/serial/data/test3.msh";
     Mesh mesh(path, 1, 1);
     ofstream meshfile("disk_mfem.mesh");
     mesh.Print(meshfile);
