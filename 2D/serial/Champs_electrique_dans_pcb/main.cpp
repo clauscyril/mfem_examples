@@ -1,5 +1,6 @@
 #include "mfem.hpp"
 #include <iostream>
+#include <fstream>
 
 using namespace mfem;
 using namespace std;
@@ -93,8 +94,21 @@ int main(int argc,char* argv[]) {
     // socketstream sol_sock_i(vishost, visport);
     sol_sock.precision(8);
     // sol_sock_i.precision(8);
-    sol_sock << "solution\n" << mesh << v << "window_title 'Solution'"
-            << flush;  // Génère une erreur dans glvis à corriger 
+    sol_sock << "solution\n" << mesh << v << "window_title 'Solution'";
+    sol_sock << "keys lc\n";
+    // sol_sock << "keys L\n10\n";
+    sol_sock << "keys Rz\n";
+    sol_sock << flush;  // Génère une erreur dans glvis à corriger 
+
+
+    // Export des données au format csv
+    ofstream file("../data/sol.csv");
+    file << "x,y,potentiel\n";
+    for (int i = 0; i<mesh.GetNV(); i++){
+        const double *u = mesh.GetVertex(i);
+        file << u[0] << "," << u[1] << "," << v(i) << endl;
+    }
+    file.close();
 
     return 0;
 }
