@@ -38,7 +38,11 @@ int main(int argc,char* argv[]) {
     // Liste des dofs de bord
     cout << "Taille bdr_attribute : " << mesh.bdr_attributes.Size() << endl;
 
-    // Tableau des vrais dof (pour les conditions de dirichlet)
+    mesh.PrintInfo(cout);
+
+
+    // Tableau des vrais dof (pour les conditions de Dirichlet)
+    //  CAS POTENTIEL IMPOSE (Condition de type Dirichlet)
     Array<int> ess_tdof_list;
     for (int i = 0; i < mesh.GetNV(); i++) {
         const double *v = mesh.GetVertex(i);
@@ -47,15 +51,13 @@ int main(int argc,char* argv[]) {
         } 
         
     }
-    cout << "Nombre de nœuds sur y = 0 : " << ess_tdof_list.Size() << endl;
-    cout << fespace->GetTrueVSize() << endl;
-    // mesh.GetBdrElementVertices(0, );
+
     GridFunction v(fespace);
     v = 1.f;
     for (int i = 0; i < ess_tdof_list.Size(); i++){
         const double *u = mesh.GetVertex(ess_tdof_list[i]);
         if (u[1] > 0){
-            v(ess_tdof_list[i]) = 0.001f;
+            v(ess_tdof_list[i]) = 10.f;
         } else {
             v(ess_tdof_list[i]) = 0.f;
         }
@@ -63,9 +65,44 @@ int main(int argc,char* argv[]) {
 
     cout << "Nombre de conditions de Dirichlet : " << ess_tdof_list.Size() << endl;
 
+    // // CAS CHARGE IMPOSEE (Conditions de type Neumann)
+    // Array<int> electrode_surface;   // Ce tableau doit contenir les numéros des arrêtes !!!! pas des noeuds
+
+    // cout << mesh.GetNBE() << endl;
+    // for (int i=0; i < mesh.GetNBE(); i++){
+    //     int nb_arrete = mesh.GetBdrAttribute(i);  // On récupère le numéro de la surface
+    //     Array<int> nodes;
+    //     mesh.GetBdrElement(i)->GetVertices(nodes);
+    //     cout << "Surface : " << nb_arrete << " contient les noeuds : ";
+
+    //     for (int j = 0; j < nodes.Size(); j++)
+    //     {
+    //         double x = mesh.GetVertex(nodes[j])[0];
+    //         double y = mesh.GetVertex(nodes[j])[1];
+    //         cout << nodes[j] << " (" << x << " , " << y << ") ";
+    //     }
+    //     cout << endl;
+    // }
+
+    // for (int i =0; i< mesh.GetNBE(); i++){
+    //     cout << mesh.GetBdrAttribute(i) << endl;
+    // }
+
+
+    // // On va imposer la charge à 0 en y = 0
+    // for (int i = 0; i < mesh.GetNV(); i++) {
+    //     const double *v = mesh.GetVertex(i);
+    //     if (abs(v[1]) < 1e-6 ) {  // Vérifie si y = 0
+    //         ess_tdof_list.Append(i);  // On ajout l'indice du noeud où on impose la surface
+    //     } 
+    // }
+
+    // Array<int> surf_attrib;
+    // surf_attrib.Append(1); 
+
     LinearForm *b = new LinearForm(fespace);
     *b = 0.f;
-    // b->AddDomainIntegrator(new VectorFEDomainLFIntegrator());
+    // b->AddBoundaryIntegrator(new BoundaryLFIntegrator(ConstantCoefficient(10.0)), surf_attrib);
     b->Assemble();
 
 

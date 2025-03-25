@@ -18,6 +18,6 @@ plt.colorbar(label="Potentiel")
 plt.triplot(triang, 'k-', alpha=0.1)  # Tracer le maillage en noir
 plt.xlabel("X")
 plt.ylabel("Y")
-plt.title("Lignes d'équipotentielles sans interpolation")
+plt.title("Lignes d'équipotentielles")
 plt.show()
 
