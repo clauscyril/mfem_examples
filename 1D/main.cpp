@@ -150,11 +150,14 @@ int main(int argc, char* argv[])
     char vishost[] = "localhost";
     int  visport   = 19916;
     socketstream sol_sock_r(vishost, visport);
-    // socketstream sol_sock_i(vishost, visport);
+    socketstream sol_sock_i(vishost, visport);
     sol_sock_r.precision(8);
-    // sol_sock_i.precision(8);
+    sol_sock_i.precision(8);
     sol_sock_r << "solution\n" << mesh << u.real()
                << "window_title 'Solution: Real Part'" 
+               << "pause\n" << "keys c\n" << flush;
+    sol_sock_i << "solution\n" << mesh << u.imag()
+               << "window_title 'Solution: Imag Part'" 
                << "pause\n" << "keys c\n" << flush;
     
     return 0;
