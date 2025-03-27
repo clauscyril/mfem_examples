@@ -12,7 +12,7 @@ double A_func_bdr(const Vector &x);
 int main(int argc, char* argv[])
 {   
     int n;       
-    int order = 2;  
+    int order = 4;  
 
     const char *path = "../disque.msh";
     Mesh mesh(path, 1, 1);
@@ -49,6 +49,31 @@ int main(int argc, char* argv[])
 
     cout << mesh.bdr_attributes.Size() << endl << endl;
 
+
+
+    // PERMET D'AFFICHER LES COORDONNEES DES NOEUDS DE BORD : 
+    
+    set<int> boundary_vertices; // Utilisation d'un set pour éviter les doublons
+    
+    // Récupération des sommets des éléments de bord
+    for (int i = 0; i < mesh.GetNBE(); i++) // GetNBE() : nombre d'éléments de bord
+    {
+        Array<int> vertices;
+        mesh.GetBdrElementVertices(i, vertices);
+        for (int j = 0; j < vertices.Size(); j++)
+        {
+            boundary_vertices.insert(vertices[j]); // Stocker l'indice du sommet
+        }
+    }
+    // Affichage des coordonnées des sommets sur le bord
+    for (int v : boundary_vertices)
+    {
+        const double *x = mesh.GetVertex(v);
+        Vector coord(2);
+        coord(0) = x[0]; coord(1) = x[1];
+        cout << "(" << x[0] << ", " << x[1] << ") : A.n = " << A_func_bdr(coord) << endl;
+    }
+
     
     ComplexGridFunction v(fespace);
     v = 0.f;
@@ -68,13 +93,12 @@ int main(int argc, char* argv[])
 
     ComplexLinearForm *b = new ComplexLinearForm(fespace, ComplexOperator::BLOCK_SYMMETRIC);
     b->AddDomainIntegrator(NULL, new DomainLFGradIntegrator(sigmajwA)); 
-    b->AddBoundaryIntegrator(NULL, new BoundaryLFIntegrator(omegaA), surf_attrib); 
-    // b->AddDomainIntegrator(new DomainLFGradIntegrator(sigmajwA),NULL); 
-    // b->AddBoundaryIntegrator(new BoundaryLFIntegrator(omegaA),NULL, surf_attrib); 
+    b->AddBoundaryIntegrator(NULL, new BoundaryLFIntegrator(omegaA), surf_attrib);
+
     b->Assemble();
 
-    ConstantCoefficient sigma(0.2f);
-    ConstantCoefficient m(1);
+    ConstantCoefficient sigma(-0.2f);
+    // ConstantCoefficient m(1);
 
     // Forme bilinéaire réelle principale
     SesquilinearForm *a = new SesquilinearForm(fespace, ComplexOperator::BLOCK_SYMMETRIC);
@@ -111,17 +135,17 @@ int main(int argc, char* argv[])
 
 
     
-    // // 🔹 Utilisation du préconditionneur `pc0p` dans le solveur
-    // pcOp->FormSystemMatrix(ess_tdof_list, Pc);
-    // GSSmoother M((SparseMatrix&)(*Pc));  
+    // 🔹 Utilisation du préconditionneur `pc0p` dans le solveur
+    pcOp->FormSystemMatrix(ess_tdof_list, Pc);
+    GSSmoother M((SparseMatrix&)(*Pc));  
 
-    // cout << "test1" << endl;
-    // PCG(*A, M, B, U, 1, 1000, 1e-12, 0.f);
-    // // cout << "test2" << endl;
+    cout << "test1" << endl;
+    PCG(*A, M, B, U, 1, 1000, 1e-12, 0.f);
+    // cout << "test2" << endl;
 
-    // // Récupération des solutions
-    // a->RecoverFEMSolution(U, *b, v);
-    // // cout << "test3" << endl;
+    // Récupération des solutions
+    a->RecoverFEMSolution(U, *b, v);
+    // cout << "test3" << endl;
     
 
 
@@ -162,7 +186,7 @@ int main(int argc, char* argv[])
     gmres.SetPreconditioner(BDP);
     gmres.SetOperator(*A.Ptr());
     gmres.SetRelTol(1e-12);
-    gmres.SetMaxIter(1000);
+    gmres.SetMaxIter(10000);
     gmres.SetPrintLevel(1);
     gmres.Mult(B, U);
 
@@ -175,62 +199,40 @@ int main(int argc, char* argv[])
     v.real().Save(sol_r_ofs);
     v.imag().Save(sol_i_ofs);
 
+    GridFunction v_i = v.imag();
 
-    // AFFICHAGE DU GRADIENT Pour afficher j
+    GradientGridFunctionCoefficient grad_v_coeff(&v_i);
 
-    // Définition d’un nouvel espace pour le gradient (DG0 ou RT pour H(div))
-    FiniteElementCollection *grad_fec = new L2_FECollection(0, mesh.Dimension());
-    FiniteElementSpace *grad_fes = new FiniteElementSpace(&mesh, grad_fec, mesh.Dimension());
-
-    // GridFunction pour stocker le gradient
-    GridFunction grad_u(grad_fes);
-
-    GridFunction x_real(fespace);
-    GridFunction x_imag(fespace);
-
-    std::ifstream real_file("sol_r.gf");
-    std::ifstream imag_file("sol_i.gf");
+    FiniteElementCollection *fec_grad = new ND_FECollection(order, dim );  // Raviart-Thomas (RT) pour le gradient
+    FiniteElementSpace *fespace_grad = new FiniteElementSpace(&mesh, fec_grad);
     
-    x_real.Load(real_file);
-    x_imag.Load(imag_file);
+    GridFunction grad_v(fespace_grad);
+
+    grad_v.ProjectCoefficient(grad_v_coeff);
+    GridFunction J(fespace_grad);
+    VectorFunctionCoefficient A_coeff(dim , A_func);
+
+    J.ProjectCoefficient(A_coeff);
     
-    // GridFunction pour stocker le gradient réel et imaginaire
-    GridFunction grad_real(grad_fes);
-    GridFunction grad_imag(grad_fes);
+    J += grad_v;
 
-        // Projection du gradient
-    GradientGridFunctionCoefficient grad_real_coeff(&x_real);
-    GradientGridFunctionCoefficient grad_imag_coeff(&x_imag);
-    grad_real.ProjectCoefficient(grad_real_coeff);
-    grad_imag.ProjectCoefficient(grad_imag_coeff);
 
-    // Visualisation GLVis
+    cout << "test" << endl;
+   // Visualisation GLVis
     char vishost[] = "localhost";
     int  visport   = 19916;
-    socketstream sol_sock_r(vishost, visport);
     socketstream sol_sock_i(vishost, visport);
-    sol_sock_r.precision(8);
+    socketstream sol_sock_grad(vishost, visport);
     sol_sock_i.precision(8);
-    sol_sock_r << "solution\n" << mesh << v.real()
-                << "window_title 'Solution: Real Part'" 
-                << "pause\n" << "keys c\n" << flush;
+    sol_sock_grad.precision(8);
     sol_sock_i << "solution\n" << mesh << v.imag()
                 << "window_title 'Solution: Imaginary Part'" 
                 << "pause\n" << "keys c\n" << flush;
+    sol_sock_grad << "solution\n" << mesh << J
+                << "window_title 'Solution: Gradient'" 
+                << "pause\n" << "keys c\n" << flush;
 
 
-    // char vishost[] = "localhost";
-    // int  visport   = 19916;
-    socketstream grad_sock_r(vishost, visport);
-    socketstream grad_sock_i(vishost, visport);
-    grad_sock_r.precision(8);
-    grad_sock_i.precision(8);
-    grad_sock_r << "solution\n" << mesh << grad_real
-                << "window_title 'Solution: Real Part'" 
-                << "pause\n" << "keys c\n" << flush;
-    grad_sock_i << "solution\n" << mesh << grad_imag
-                << "window_title 'Solution: Imaginary Part'" 
-                << "pause\n" << "keys c\n" << flush;
     
     cout << "test" << endl;
     
@@ -239,22 +241,23 @@ int main(int argc, char* argv[])
     delete b;
     delete fespace;
     delete fec;
+    delete fespace_grad;
 
     return 0;
 }
-
 void A_func(const Vector &x, Vector &A){
-    double B = 0.01;
+    double B = 1;
     double sigma_ = 0.2;
     double omega = M_PI*2*50;
-    A(0) = +sigma_*omega*B/2*x(1);
+    // double r = sqrt(x(1)*x(1) + x(0)*x(0));
+    A(0) = sigma_*omega*B/2*x(1);
     A(1) = -sigma_*omega*B/2*x(0);
     A(2) = 0.f;  
 }
 double A_func_bdr(const Vector &x)
 {
-    double B = 0.01;
+    double B = 1;
     double omega = M_PI*2* 50;
     real_t norm = sqrt(x(1)*x(1) + x(0)*x(0));
-    return B*omega*(-x(0)/norm * omega*B/2*x(1) + x(1)/norm * omega*B/2*x(1));  
+    return B*omega*(-x(0)/norm * omega*B/2*x(1) + x(1)/norm * omega*B/2*x(0));  
 }
