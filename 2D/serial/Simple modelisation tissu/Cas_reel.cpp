@@ -14,6 +14,7 @@ double A_func_bdr2(const Vector &x);
 double B = 0.1;
 double sigma_ = 0.2;
 double omega = M_PI*2*1e3;
+double alpha_ = 1.f;
 
 
 int main(int argc, char* argv[])
@@ -25,6 +26,10 @@ int main(int argc, char* argv[])
     Mesh mesh(path, 1, 1);
 
     mesh.UniformRefinement();
+    
+    // mesh.UniformRefinement();
+    // mesh.UniformRefinement();
+    // mesh.UniformRefinement();
 
     int ne = mesh.GetNE();
     int dim = mesh.Dimension();
@@ -33,7 +38,7 @@ int main(int argc, char* argv[])
     cout << "Nombre d'elements : " << ne << endl;
     cout << "Dim : " << dim << "\nSpaceDim : " << spaceDim << endl;
 
-    FiniteElementCollection *fec = new H1_FECollection(order, dim+1);    
+    FiniteElementCollection *fec = new H1_FECollection(order, dim);    
     FiniteElementSpace *fespace = new FiniteElementSpace(&mesh, fec);
     cout << "Number of finite element unknowns: "
          << fespace->GetTrueVSize() << endl;
@@ -47,18 +52,17 @@ int main(int argc, char* argv[])
     Array<int> ess_tdof_list;
     // for (int i = 0; i < mesh.GetNV(); i++) {
     //     const double *v = mesh.GetVertex(i);
-    //     if (abs(v[0]) > 0.45) {  // 
+    //     if (v[0] > 0.48) {  // 
     //         ess_tdof_list.Append(i);
     //     } 
-        
     // }
 
     GridFunction v(fespace);
-    // v = 0.f;
+    v = 0.f;
     // for (int i = 0; i < ess_tdof_list.Size(); i++){
     //     const double *u = mesh.GetVertex(ess_tdof_list[i]);
     //     if (u[0] > 0) {
-    //         v(ess_tdof_list[i]) = 1.f;
+    //         v(ess_tdof_list[i]) = 0.f;
     //     } else {
     //         v(ess_tdof_list[i]) = -1.f;
     //     }
@@ -67,14 +71,18 @@ int main(int argc, char* argv[])
 
     cout << mesh.bdr_attributes.Size() << endl << endl;
 
-    VectorFunctionCoefficient sigmajwA(dim, A_func1);
-    // VectorFunctionCoefficient sigmajwA(dim, A_func2);
+    // VectorFunctionCoefficient sigmajwA(dim, A_func1);
+    VectorFunctionCoefficient sigmajwA(dim, A_func2);
 
-    FunctionCoefficient omegaA(A_func_bdr1);
-    // FunctionCoefficient omegaA(A_func_bdr2);
+    // FunctionCoefficient omegaA(A_func_bdr1);
+    FunctionCoefficient omegaA(A_func_bdr2);
+
+    Array<int> surf_attrib;
+    surf_attrib.Append(1);  
 
     LinearForm *b = new LinearForm(fespace);
     b->AddDomainIntegrator(new DomainLFGradIntegrator(sigmajwA)); 
+    // b->AddBoundaryIntegrator(new BoundaryLFIntegrator(omegaA), surf_attrib);
     b->Assemble();
 
     ConstantCoefficient sigma(sigma_);
@@ -105,8 +113,8 @@ int main(int argc, char* argv[])
     cout << "test aled" << endl;
     GradientGridFunctionCoefficient grad_v_coeff(&v);
 
-    FiniteElementCollection *fec_grad = new H1_FECollection(order, dim);  // Raviart-Thomas (RT) pour le gradient
-    FiniteElementSpace *fespace_grad = new FiniteElementSpace(&mesh, fec_grad, dim);
+    FiniteElementCollection *fec_grad = new ND_FECollection(order, dim);  // Raviart-Thomas (RT) pour le gradient
+    FiniteElementSpace *fespace_grad = new FiniteElementSpace(&mesh, fec_grad);
 
     GridFunction grad_v(fespace_grad);
     
@@ -115,12 +123,12 @@ int main(int argc, char* argv[])
     cout << "Dimension : " << dim << endl;
     GridFunction J(fespace_grad);
     
-    VectorFunctionCoefficient A_coeff(dim , A_func1);
-    // VectorFunctionCoefficient A_coeff(dim , A_func2);
+    // VectorFunctionCoefficient A_coeff(dim , A_func1);
+    VectorFunctionCoefficient A_coeff(dim , A_func2);
     J.ProjectCoefficient(A_coeff);
     
     grad_v *= sigma_;
-    J += grad_v;
+    J -= grad_v;
 
     cout << "test" << endl;
    // Visualisation GLVis
@@ -150,21 +158,23 @@ int main(int argc, char* argv[])
 void A_func1(const Vector &x, Vector &A_vect){
     // double r = sqrt(x(1)*x(1) + x(0)*x(0));
     // cout << A_vect.Size();
-    A_vect(0) = -sigma_*omega*B/2*x(1);
-    A_vect(1) = +sigma_*omega*B/2*x(0);
+    A_vect(0) = -sigma_*omega*B/2*x(1) + 2*sigma_*omega*alpha_ * x(0);
+    A_vect(1) = +sigma_*omega*B/2*x(0) + 2*sigma_*omega*alpha_ * x(1);
+    // A_vect(0) = -sigma_*omega*B/2*x(1);
+    // A_vect(1) = +sigma_*omega*B/2*x(0);
     // A_vect(2) = 10.f;  
 }
 
 double A_func_bdr1(const Vector &x)
 {
     real_t norm = sqrt(x(1)*x(1) + x(0)*x(0));
-    return B*omega*(-x(0)/norm * omega*B/2*x(1) + x(1)/norm * omega*B/2*x(0));  
+    return -2*alpha_*omega*norm;  
 }
 
 void A_func2(const Vector &x, Vector &A){
     // double r = sqrt(x(1)*x(1) + x(0)*x(0));
     A(0) = 0.f;
-    A(1) = -sigma_*omega*B*x(0);
+    A(1) = sigma_*omega*B*x(0);
     A(2) = 0.f;  
 }
 
