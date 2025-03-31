@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
     int n;       
     int order = 1;  
 
-    const char *path = "../disque.msh";
+    const char *path = "../disque3D.msh";
     Mesh mesh(path, 1, 1);
 
     mesh.UniformRefinement();
@@ -41,9 +41,9 @@ int main(int argc, char* argv[])
     Array<int> ess_tdof_list;
     for (int i = 0; i < mesh.GetNV(); i++) {
         const double *v = mesh.GetVertex(i);
-        if (abs(v[0]) > 0.48) {  // 
+        if ((v[0] > 0.48 && v[2] > 0.45) or (v[0] < -0.48 && v[2] < 0.05)) {  // 
             ess_tdof_list.Append(i);
-        } 
+        }
         
     }
 
@@ -126,7 +126,7 @@ int main(int argc, char* argv[])
     sol_sock_i << "solution\n" << mesh << v
                 << "window_title 'Solution: Potentiel'" 
                 << "pause\n" << "keys c\n" << flush;
-    sol_sock_J << "solution\n" << mesh << J
+    sol_sock_J << "solution\n" << mesh << grad_v
                 << "window_title 'Solution: Gradient'" 
                 << "pause\n" << "keys c\n" << flush;
 

@@ -13,7 +13,7 @@ double A_func_bdr2(const Vector &x);
 
 double B = 0.1;
 double sigma_ = 0.2;
-double omega = M_PI*2*1e3;
+double omega = M_PI*2*50;
 double alpha_ = 1.f;
 
 
@@ -22,12 +22,11 @@ int main(int argc, char* argv[])
     int n;       
     int order = 2;  
 
-    const char *path = "../disque.msh";
+    const char *path = "../disque3D_2.msh";
     Mesh mesh(path, 1, 1);
 
     mesh.UniformRefinement();
-    
-    // mesh.UniformRefinement();
+    mesh.UniformRefinement();
     // mesh.UniformRefinement();
     // mesh.UniformRefinement();
 
@@ -50,6 +49,7 @@ int main(int argc, char* argv[])
     // Gestion des conditions aux limites
     // Gestion des conditions aux limites
     Array<int> ess_tdof_list;
+
     // for (int i = 0; i < mesh.GetNV(); i++) {
     //     const double *v = mesh.GetVertex(i);
     //     if (v[0] > 0.48) {  // 
@@ -58,7 +58,7 @@ int main(int argc, char* argv[])
     // }
 
     GridFunction v(fespace);
-    v = 0.f;
+    // v = 0.f;
     // for (int i = 0; i < ess_tdof_list.Size(); i++){
     //     const double *u = mesh.GetVertex(ess_tdof_list[i]);
     //     if (u[0] > 0) {
@@ -69,14 +69,20 @@ int main(int argc, char* argv[])
     // }
 
 
+    // IMPOSE TOUS LES BORDS à 0.
+    // // Marquer les DOFs associés aux conditions de Dirichlet
+    // Array<int> ess_bdr(mesh.bdr_attributes.Max());
+    // ess_bdr = 1; // Appliquer la condition de Dirichlet sur tout le bord
+    // fespace->GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+
+
     cout << mesh.bdr_attributes.Size() << endl << endl;
 
     // VectorFunctionCoefficient sigmajwA(dim, A_func1);
     VectorFunctionCoefficient sigmajwA(dim, A_func2);
 
-    // FunctionCoefficient omegaA(A_func_bdr1);
-    FunctionCoefficient omegaA(A_func_bdr2);
-
+    FunctionCoefficient omegaA(A_func_bdr1);
+    // FunctionCoefficient omegaA(A_func_bdr2);
     Array<int> surf_attrib;
     surf_attrib.Append(1);  
 
@@ -158,11 +164,11 @@ int main(int argc, char* argv[])
 void A_func1(const Vector &x, Vector &A_vect){
     // double r = sqrt(x(1)*x(1) + x(0)*x(0));
     // cout << A_vect.Size();
-    A_vect(0) = -sigma_*omega*B/2*x(1) + 2*sigma_*omega*alpha_ * x(0);
-    A_vect(1) = +sigma_*omega*B/2*x(0) + 2*sigma_*omega*alpha_ * x(1);
-    // A_vect(0) = -sigma_*omega*B/2*x(1);
-    // A_vect(1) = +sigma_*omega*B/2*x(0);
-    // A_vect(2) = 10.f;  
+    // A_vect(0) = -sigma_*omega*B/2*x(1) + 2*sigma_*omega*alpha_ * x(0);
+    // A_vect(1) = +sigma_*omega*B/2*x(0) + 2*sigma_*omega*alpha_ * x(1);
+    A_vect(0) = -sigma_*omega*B/2*x(1);
+    A_vect(1) = +sigma_*omega*B/2*x(0);
+    A_vect(2) = 0.f;  
 }
 
 double A_func_bdr1(const Vector &x)
