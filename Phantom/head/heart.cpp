@@ -4,6 +4,7 @@
 #include <CGAL/Mesh_criteria_3.h>
 #include <CGAL/Labeled_mesh_domain_3.h>
 #include <CGAL/make_mesh_3.h>
+#include <boost/container/container_fwd.hpp>
 
 // Domain
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
