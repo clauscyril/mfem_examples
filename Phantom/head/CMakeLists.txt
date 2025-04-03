@@ -13,7 +13,7 @@ if(WIN32)
 endif()
 
 
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 project(MFEMExample)
 

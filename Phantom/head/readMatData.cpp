@@ -1,243 +1,71 @@
 #include <iostream>
-#include "mat.h"   // Permet de lire les fichiers .mat (Données MATLAB)
+#include <mat.h>  // 📌 Header MATLAB officiel
+#include <vector>
 
 using namespace std;
 
-int main(){
+// 📌 Structure pour stocker les voxels
+struct VoxelData {
+    vector<vector<vector<int>>> voxels;
+    double voxel_size;
+};
 
-    // Ouvrir le fichier .mat
-    const char *file = "D:/Documents/projets/Alvar/Alvar_v16.mat";
-    MATFile *pmat = matOpen(file, "r");
-    const char *name;
-    int i;
-
-    
-    if (pmat == nullptr) {
-        cout << "Erreur lors de l'ouverture du fichier .mat" << endl;
-        return 1;
+// 📌 Fonction pour lire un fichier .mat avec `mat.h`
+VoxelData loadMatFile(const string& filename, const string& variable_name) {
+    // 📌 Ouvre le fichier .mat
+    MATFile *pmat = matOpen(filename.c_str(), "r");
+    if (!pmat) {
+        cerr << "Erreur : Impossible d'ouvrir " << filename << endl;
+        exit(1);
     }
 
-    // Obtenir la liste des variables dans le fichier
-    int ndir = 0;
-    char **dir = matGetDir(pmat, &ndir);
-    if (dir == nullptr) {
-        std::cerr << "Erreur lors de la récupération de la liste des variables" << std::endl;
+    // 📌 Charge la variable
+    mxArray *array = matGetVariable(pmat, variable_name.c_str());
+    if (!array) {
+        cerr << "Erreur : Variable '" << variable_name << "' non trouvée" << endl;
         matClose(pmat);
-        return 1;
+        exit(1);
     }
-    // Afficher les noms des variables
-    std::cout << "Liste des variables dans le fichier .mat :" << std::endl;
-    for (i = 0; i < ndir; ++i) {
-        std::cout << dir[i] << std::endl;
-        // mxFree(dir[i]); // Libérer la mémoire allouée pour chaque nom de variable
-    }
-    mxFree(dir); // Libérer la mémoire allouée pour le tableau de noms de variables
 
-    // Fermer le fichier .mat
+    // 📌 Récupération des dimensions
+    size_t rows = mxGetDimensions(array)[0];
+    size_t cols = mxGetDimensions(array)[1];
+    size_t slices = mxGetDimensions(array)[2];
+
+    cout << "Matrice 3D trouvée : " << rows << "x" << cols << "x" << slices << endl;
+
+    // 📌 Copie des données
+    VoxelData voxel_data;
+    voxel_data.voxel_size = 1.0; // Modifier selon le contexte
+    voxel_data.voxels.resize(rows, vector<vector<int>>(cols, vector<int>(slices, 0)));
+
+    cout << rows << ", " << cols << ", " << slices << endl;
+    int8_T* data = static_cast<int8_T*>(mxGetData(array));
+    for (size_t i = 0; i < rows; i++) {
+        for (size_t j = 0; j < cols; j++) {
+            for (size_t k = 0; k < slices; k++) {
+                // cout << static_cast<int>(data[i + j * rows + k * rows * cols]) << " , " << k << endl;
+                voxel_data.voxels[i][j][k] = static_cast<int>(data[i + j * rows + k * rows * cols]); 
+            }
+        }
+    }
+
+    // Nettoyage et fermeture
+    mxDestroyArray(array);
     matClose(pmat);
 
-    pmat = matOpen(file, "r");
-    if (pmat == nullptr) {
-    printf("Error reopening file %s\n", file);
-    return(1);
-    }
+    return voxel_data;
+}
 
+// 📌 Test
+int main() {
+    string filename = "../../Alvar_v16.mat";
+    string variable_name = "voxelData";  // Nom de la variable MATLAB
 
-    mxArray *pa;
+    VoxelData voxel_data = loadMatFile(filename, variable_name);
 
-    /* Get headers of all variables */
-    // printf("\nExamining the header for each variable:\n");
-    for (i=0; i < ndir; i++) {
-    pa = matGetNextVariableInfo(pmat, &name);
-    if (pa == NULL) {
-    // printf("Error reading in file %s\n", file);
-    return(1);
-    }
-    /* Diagnose header pa */
-    // printf("According to its header, array %s has %d dimensions\n",
-    //     name, mxGetNumberOfDimensions(pa));
-    if (mxIsFromGlobalWS(pa))
-        printf("  and was a global variable when saved\n");
-    else
-        printf("  and was a local variable when saved\n");
-    mxDestroyArray(pa);
-    }
-
-   /* Reopen file to read in actual arrays. */
-   if (matClose(pmat) != 0) {
-    // printf("Error closing file %s\n",file);
-    return(1);
-    }
-    pmat = matOpen(file, "r");
-    if (pmat == NULL) {
-    // printf("Error reopening file %s\n", file);
-    return(1);
-    }
-
-    /* Read in each array. */
-    printf("\nReading in the actual array contents:\n");
-    for (i=0; i<ndir; i++) {
-        pa = matGetNextVariable(pmat, &name);
-        if (pa == NULL) {
-        printf("Error reading in file %s\n", file);
-        return(1);
-        } 
-        /*
-        * Diagnose array pa
-        */
-        // printf("According to its contents, array %s has %d dimensions\n",
-        //     name, mxGetNumberOfDimensions(pa));
-        if (mxIsFromGlobalWS(pa))
-    printf("  and was a global variable when saved\n");
-        else
-    printf("  and was a local variable when saved\n");
-        mxDestroyArray(pa);
-    }
+    // 📌 Vérification d'un voxel
+    cout << "Valeur du voxel (10,10,10) : " << voxel_data.voxels[1300][300][1600] << endl;
 
     return 0;
 }
-
-/*
- * MAT-file diagnose program
- *
- * See the MATLAB API Guide for compiling information.
- *
- * Calling syntax:
- *
- *   matdgns <matfile>
- *
- * It will diagnose the MAT-file named <matfile>.
- *
- * This program demonstrates the use of the following functions:
- *
- *  matClose
- *  matGetDir
- *  matGetNextVariable
- *  matGetNextVariableInfo
- *  matOpen
- *
- * Copyright 1984-2003 The MathWorks, Inc.
- */
-// #include <stdio.h>
-// #include <stdlib.h>
-// #include "mat.h"
-
-// int diagnose(const char *file) {
-//     MATFile *pmat;
-//     const char **dir;
-//     const char *name;
-//     int	  ndir;
-//     int	  i;
-//     mxArray *pa;
-
-//     printf("Reading file %s...\n\n", file);
-
-//     /*
-//     * Open file to get directory
-//     */
-//     pmat = matOpen(file, "r");
-//     if (pmat == NULL) {
-//     printf("Error opening file %s\n", file);
-//     return(1);
-//     }
-
-//     /*
-//     * get directory of MAT-file
-//     */
-//     dir = (const char **)matGetDir(pmat, &ndir);
-//     if (dir == NULL) {
-//     printf("Error reading directory of file %s\n", file);
-//     return(1);
-//     } else {
-//     printf("Directory of %s:\n", file);
-//     for (i=0; i < ndir; i++)
-//         printf("%s\n",dir[i]);
-//     }
-//     mxFree(dir);
-
-//     /* In order to use matGetNextXXX correctly, reopen file to read in headers. */
-//     if (matClose(pmat) != 0) {
-//     printf("Error closing file %s\n",file);
-//     return(1);
-//     }
-//     pmat = matOpen(file, "r");
-//     if (pmat == NULL) {
-//     printf("Error reopening file %s\n", file);
-//     return(1);
-//     }
-
-//     /* Get headers of all variables */
-//     printf("\nExamining the header for each variable:\n");
-//     for (i=0; i < ndir; i++) {
-//     pa = matGetNextVariableInfo(pmat, &name);
-//     if (pa == NULL) {
-//     printf("Error reading in file %s\n", file);
-//     return(1);
-//     }
-//     /* Diagnose header pa */
-//     printf("According to its header, array %s has %d dimensions\n",
-//         name, mxGetNumberOfDimensions(pa));
-//     if (mxIsFromGlobalWS(pa))
-//         printf("  and was a global variable when saved\n");
-//     else
-//         printf("  and was a local variable when saved\n");
-//     mxDestroyArray(pa);
-//     }
-
-//     /* Reopen file to read in actual arrays. */
-//     if (matClose(pmat) != 0) {
-//     printf("Error closing file %s\n",file);
-//     return(1);
-//     }
-//     pmat = matOpen(file, "r");
-//     if (pmat == NULL) {
-//     printf("Error reopening file %s\n", file);
-//     return(1);
-//     }
-
-//     /* Read in each array. */
-//     printf("\nReading in the actual array contents:\n");
-//     for (i=0; i<ndir; i++) {
-//         pa = matGetNextVariable(pmat, &name);
-//         if (pa == NULL) {
-//         printf("Error reading in file %s\n", file);
-//         return(1);
-//         } 
-//         /*
-//         * Diagnose array pa
-//         */
-//         printf("According to its contents, array %s has %d dimensions\n",
-//             name, mxGetNumberOfDimensions(pa));
-//         if (mxIsFromGlobalWS(pa))
-//     printf("  and was a global variable when saved\n");
-//         else
-//     printf("  and was a local variable when saved\n");
-//         mxDestroyArray(pa);
-//     }
-
-//     if (matClose(pmat) != 0) {
-//         printf("Error closing file %s\n",file);
-//         return(1);
-//     }
-//     printf("Done\n");
-//     return(0);
-// }
-
-// int main(int argc, char **argv)
-// {
-
-//     int result;
-//     const char* path = "D:/Documents/projets/Alvar/Alvar_v16.mat";
-//     if (argc > 1)
-//     result = diagnose(path);
-//     else{
-//     result = 0;
-//     printf("Usage: matdgns <matfile>");
-//     printf(" where <matfile> is the name of the MAT-file");
-//     printf(" to be diagnosed\n");
-//     }
-
-//     return (result==0)?EXIT_SUCCESS:EXIT_FAILURE;
-
-// }
-
