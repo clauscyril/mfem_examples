@@ -44,18 +44,21 @@ set(SOURCES_GENERATEMESH generateMesh.cpp)
 
 include_directories(${MATLAB_INCLUDE_DIR})
 
-add_executable(heart ${SOURCES_HEART})
-target_link_libraries(heart
-    CGAL::CGAL
-    CGAL::CGAL_Core  # For CGAL exception
-    Boost::container # For boost::container errors
-    Boost::system    # Often required by Boost components
-    gmp              # GMP library
-    mpfr             # MPFR library
-)
+# add_executable(heart ${SOURCES_HEART})
+# target_link_libraries(heart
+#     CGAL::CGAL
+#     CGAL::CGAL_Core  # For CGAL exception
+#     Boost::container # For boost::container errors
+#     Boost::system    # Often required by Boost components
+#     gmp              # GMP library
+#     mpfr             # MPFR library
+# )
 
-add_executable(readMatData ${SOURCES_READMATDATA})
-target_link_libraries(readMatData mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
+# add_executable(readMatData ${SOURCES_READMATDATA})
+# target_link_libraries(readMatData mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
 
-add_executable(generateMesh ${SOURCES_GENERATEMESH})
-target_link_libraries(generateMesh mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
+# add_executable(generateMesh ${SOURCES_GENERATEMESH})
+# target_link_libraries(generateMesh mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
+
+add_executable(main main.cpp)
+target_link_libraries(main mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
