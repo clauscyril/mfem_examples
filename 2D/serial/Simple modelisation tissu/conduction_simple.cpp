@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
     int n;       
     int order = 1;  
 
-    const char *path = "../disque3D.msh";
+    const char *path = "../disque.msh";
     Mesh mesh(path, 1, 1);
 
     mesh.UniformRefinement();

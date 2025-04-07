@@ -8,7 +8,5 @@ Curve Loop(1) = {1};
 Curve Loop(2) = {1};
 //+
 Plane Surface(1) = {2};
-//+
-Extrude {0, 0, 0.1} {
-  Surface{1}; 
-}
+
+Mesh.CharacteristicLengthMax = 0.02;

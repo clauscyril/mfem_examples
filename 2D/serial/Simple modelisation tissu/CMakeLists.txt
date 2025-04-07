@@ -16,3 +16,6 @@ target_link_libraries(cas_reel mfem)
 
 # add_executable(cas_cond conduction_simple.cpp)
 # target_link_libraries(cas_cond mfem) 
+
+# add_executable(test test.cpp)
+# target_link_libraries(test mfem) 
