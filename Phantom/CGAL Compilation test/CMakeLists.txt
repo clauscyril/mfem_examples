@@ -19,10 +19,10 @@ find_package(Boost 1.70 REQUIRED COMPONENTS container system)
 
 # target_link_libraries(MyTarget PRIVATE ${GMP_LIBRARY} ${MPFR_LIBRARY})
 
-add_compile_options(-Wall -Wextra -Wpedantic)
+# add_compile_options(-Wall -Wextra -Wpedantic)
 
 # Définir les fichiers sources
-set(SOURCES_HEART heart.cpp)
+set(SOURCES_HEART mesh_3D_image.cpp)
 
 add_executable(heart ${SOURCES_HEART})
 target_link_libraries(heart

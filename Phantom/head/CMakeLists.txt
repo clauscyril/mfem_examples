@@ -33,7 +33,7 @@ set(MATLAB_INCLUDE_DIR "${MATLAB_PATH}/extern/include")
 # Chemin vers les bibliothèques MATLAB
 link_directories("${MATLAB_PATH}/bin/win64")
 
-add_compile_options(-Wall -Wextra -Wpedantic)
+# add_compile_options(-Wall -Wextra -Wpedantic)
 
 
 
@@ -54,8 +54,8 @@ include_directories(${MATLAB_INCLUDE_DIR})
 #     mpfr             # MPFR library
 # )
 
-# add_executable(readMatData ${SOURCES_READMATDATA})
-# target_link_libraries(readMatData mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
+add_executable(readMatData ${SOURCES_READMATDATA})
+target_link_libraries(readMatData mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
 
 # add_executable(generateMesh ${SOURCES_GENERATEMESH})
 # target_link_libraries(generateMesh mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 

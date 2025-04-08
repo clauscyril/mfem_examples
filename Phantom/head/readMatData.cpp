@@ -59,13 +59,13 @@ VoxelData loadMatFile(const string& filename, const string& variable_name) {
 
 // 📌 Test
 int main() {
-    string filename = "../../Alvar_v16.mat";
-    string variable_name = "voxelData";  // Nom de la variable MATLAB
+    string filename = "../tete.mat";
+    string variable_name = "data";  // Nom de la variable MATLAB
 
     VoxelData voxel_data = loadMatFile(filename, variable_name);
 
     // 📌 Vérification d'un voxel
-    cout << "Valeur du voxel (10,10,10) : " << voxel_data.voxels[1300][300][1600] << endl;
+    cout << "Valeur du voxel (10,10,10) : " << voxel_data.voxels[10][10][10] << endl;
 
     return 0;
 }
