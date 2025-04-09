@@ -75,15 +75,41 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
     set_brain.insert(62);
     set_brain.insert(74);
 
+    std::set<uint8_t> set_bones;
+    set_bones.insert(11);
+    // set_bones.insert(71);
 
+    std::set<uint8_t> set_tooth;
+    // set_tooth.insert(11);
+    set_tooth.insert(71);
+
+    std::set<uint8_t> set_tendons;
+    set_tendons.insert(42);
+    set_tendons.insert(51);
+    set_tendons.insert(72);
+
+    std::set<uint8_t> set_all;
+    for (int i = 1;i<86; i++) {
+        set_all.insert(i);
+    }
+
+    std::set<uint8_t> set_applied;
+
+    set_applied = set_brain;
+
+    int count = 0;
     for (size_t i=0; i<rows*cols*slices; i++) {
-        if (set_brain.find(static_cast<int>(data[i])) != set_brain.end()) { // For now, only the brain is imported
+        if (set_applied.find(static_cast<int>(data[i])) != set_applied.end()) { // For now, only the brain is imported
             dst[i] = data[i];
+            count ++;
         } else {
             dst[i] = 0;
         }
     }
-    // _writeImage(image, "tete.inr");
+
+
+    std::cout << count << std::endl;
+    // _writeImage(image, "brain.inr");
     return CGAL::Image_3(image);
 }
 
@@ -93,18 +119,22 @@ int main(int argc, char* argv[])
     const char* path = "../tete.mat";
     const char* name = "data";
 
+    // const char* path = "../../Alvar_v16.mat";
+    // const char* name = "voxelData";
+
     CGAL::Image_3 img = getMatlabImage(path, name);
 
     Mesh_domain domain = Mesh_domain::create_labeled_image_mesh_domain(img);
 
     // Mesh criteria
-    Mesh_criteria criteria(params::facet_angle(30).facet_size(10).facet_distance(2).
-                                    cell_radius_edge_ratio(2).cell_size(3));
+    Mesh_criteria criteria(params::facet_angle(30).facet_size(4).facet_distance(4).
+                                    cell_radius_edge_ratio(3).cell_size(8));
 
-    C3t3 c3t3 = CGAL::make_mesh_3<C3t3>(domain, criteria, params::lloyd().odt().perturb().exude().manifold());
+    C3t3 c3t3 = CGAL::make_mesh_3<C3t3>(domain, criteria, params::lloyd().odt().perturb().exude());
     // Output
-    std::ofstream medit_file("out.mesh");
-    CGAL::IO::write_MEDIT(medit_file, c3t3);
+    std::ofstream medit_file("meshs/brain2.mesh");
+    c3t3.output_to_medit(medit_file, false);    // Rebind to false | (use CGAL::IO::output_to_medit which is deprecated (should use CGAL::IO::write_MEDIT))
+    // CGAL::IO::write_MEDIT(medit_file, c3t3, params::all_cells(false).all_vertices(true));    // Should be equivalent to the line before but it's not exactly the case (have to check between CGAL::IO::write_MEDIT and CGAL::IO::output_to_medit (deprecated))
     medit_file.close();
 
     return 0;
