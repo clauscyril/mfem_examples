@@ -62,3 +62,6 @@ target_link_libraries(readMatData mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll)
 
 add_executable(main main.cpp)
 target_link_libraries(main mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
+
+add_executable(import_mfem import_mfem.cpp)
+target_link_libraries(import_mfem mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
