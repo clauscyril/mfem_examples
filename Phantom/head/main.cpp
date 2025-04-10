@@ -1,5 +1,6 @@
 #include <iostream>
 #include <mat.h>
+#include <unordered_map>
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
  
@@ -58,7 +59,7 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
     size_t slices = mxGetDimensions(array)[2];
     std::cout << rows << ", " << cols << ", " << slices << std::endl;
     // Initialize Image compatible with CGAL 
-    _image *image = _createImage(rows, cols, slices, 1,     // ! Matlab order is not the same as CGAL
+    _image *image = _createImage(rows, cols, slices, 1,     // 
                                 1.f, 1.f, 1.f, 
                                 1,                           // 1 = 8 bit, 2 = 16 bit (for more than 255 labels)
                                 WK_FIXED, SGN_UNSIGNED);
@@ -107,11 +108,111 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
         }
     }
 
-
     std::cout << count << std::endl;
     // _writeImage(image, "brain.inr");
     return CGAL::Image_3(image);
 }
+
+
+void Savemsh(C3t3 &c3t3, const char* name){   // Have to check differences between string and char
+    // Sauvegarde du mesh au format msh, compatible mfem
+    std::ofstream mesh_file("meshs/"+std::string(name)+".msh");
+    mesh_file << "$MeshFormat\n2.2 0 8\n$EndMeshFormat\n";
+
+    // Wrtiting the vertices 
+    std::unordered_map<Tr::Vertex_handle, int> vertex_indices;   
+    int index = 1;
+    mesh_file << "$Nodes\n";
+
+    // On écrit le nombre de noeuds (Distance entre deux itérateurs) 
+    // pas opti du tout car on parcours les itérateurs deux fois (pour compter le total et pour les ajouter)
+    // À voir s'il n'y a pas moyen d'avoir le nb total d'élement directement
+    mesh_file << std::distance(c3t3.triangulation().finite_vertices_begin(),
+                               c3t3.triangulation().finite_vertices_end()) << std::endl;
+
+    
+    for (auto vit = c3t3.triangulation().finite_vertices_begin();            // Looping on every vertices
+         vit != c3t3.triangulation().finite_vertices_end(); ++vit) {
+
+        vertex_indices[vit] = index;
+        const auto& p = vit->point();
+        mesh_file << index++ << " " << p.x() << " " << p.y() << " " << p.z() << "\n";
+    }
+    mesh_file << "$EndNodes\n";
+
+    
+
+    std::vector<std::tuple<int, std::vector<int>, int>> triangles;
+    std::vector<std::tuple<int, std::vector<int>, int>> tets;
+    
+    // on parcourt tous les triangles de bord
+    for (auto fit = c3t3.facets_in_complex_begin(); fit != c3t3.facets_in_complex_end(); ++fit) {
+        auto cell = fit->first;
+        int i = fit->second;
+        int patch_id = c3t3.surface_patch_index(*fit).first;
+    
+        std::vector<int> nodes;
+        for (int j = 0; j < 4; ++j)
+            if (j != i) nodes.push_back(vertex_indices[cell->vertex(j)]);
+        
+        triangles.push_back({patch_id, nodes, 2}); // 2 = type Gmsh triangle
+    }
+    
+    // On parcourt tous les tetraèdres
+    for (auto cit = c3t3.triangulation().finite_cells_begin();
+        cit != c3t3.triangulation().finite_cells_end(); ++cit) {
+        if (!c3t3.is_in_complex(cit)) continue;
+    
+        int label = c3t3.subdomain_index(cit);
+        std::vector<int> nodes;
+        for (int i = 0; i < 4; ++i)
+            nodes.push_back(vertex_indices[cit->vertex(i)]);
+    
+        tets.push_back({label, nodes, 4}); // 4 = type Gmsh tétraèdre
+    }
+
+    // 2. Write elements (surface + volume)
+    int elem_index = 1;
+    mesh_file << "$Elements\n";
+
+    mesh_file << tets.size() + triangles.size() << std::endl;
+
+    //  2.1 Surfaces (facets on boundary) 
+    for (auto fit = c3t3.facets_in_complex_begin();
+         fit != c3t3.facets_in_complex_end(); ++fit) {
+        auto cell = fit->first;
+        int i = fit->second;
+
+        int patch_id = c3t3.surface_patch_index(*fit).first; // label
+        std::vector<int> nodes;
+
+        for (int j = 0; j < 4; ++j) {
+            if (j != i)
+                nodes.push_back(vertex_indices[cell->vertex(j)]);
+        }
+
+        // Triangle: type 2
+        mesh_file << elem_index++ << " 2 2 " << patch_id << " " << patch_id << " "
+            << nodes[0] << " " << nodes[1] << " " << nodes[2] << "\n";
+    }
+
+    // --- 2.2 Volumes (tetrahedra) ---
+    for (auto cit = c3t3.triangulation().finite_cells_begin();
+         cit != c3t3.triangulation().finite_cells_end(); ++cit) {
+        if (!c3t3.is_in_complex(cit)) continue;
+
+        int label = c3t3.subdomain_index(cit);
+        mesh_file << elem_index++ << " 4 2 " << label << " " << label << " ";
+        for (int i = 0; i < 4; ++i) {
+            mesh_file << vertex_indices[cit->vertex(i)] << " ";
+        }
+        mesh_file << "\n";
+    }
+
+
+    mesh_file.close();
+}
+
 
 int main(int argc, char* argv[])
 {
@@ -122,6 +223,8 @@ int main(int argc, char* argv[])
     // const char* path = "../../Alvar_v16.mat";
     // const char* name = "voxelData";
 
+
+
     CGAL::Image_3 img = getMatlabImage(path, name);
 
     Mesh_domain domain = Mesh_domain::create_labeled_image_mesh_domain(img);
@@ -131,11 +234,15 @@ int main(int argc, char* argv[])
                                     cell_radius_edge_ratio(3).cell_size(8));
 
     C3t3 c3t3 = CGAL::make_mesh_3<C3t3>(domain, criteria, params::lloyd().odt().perturb().exude());
+
+
     // Output
-    std::ofstream medit_file("meshs/brain2.mesh");
-    c3t3.output_to_medit(medit_file, false);    // Rebind to false | (use CGAL::IO::output_to_medit which is deprecated (should use CGAL::IO::write_MEDIT))
-    // CGAL::IO::write_MEDIT(medit_file, c3t3, params::all_cells(false).all_vertices(true));    // Should be equivalent to the line before but it's not exactly the case (have to check between CGAL::IO::write_MEDIT and CGAL::IO::output_to_medit (deprecated))
-    medit_file.close();
+    // std::ofstream medit_file("meshs/bones2.mesh");
+    // c3t3.output_to_medit(medit_file, false);    // Rebind to false | (use CGAL::IO::output_to_medit which is deprecated (should use CGAL::IO::write_MEDIT))
+    // // CGAL::IO::write_MEDIT(medit_file, c3t3, params::all_cells(false).all_vertices(true));    // Should be equivalent to the line before but it's not exactly the case (have to check between CGAL::IO::write_MEDIT and CGAL::IO::output_to_medit (deprecated))
+    // medit_file.close();
+
+    Savemsh(c3t3, "brain");
 
     return 0;
 }
