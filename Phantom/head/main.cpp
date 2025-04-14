@@ -38,14 +38,14 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
     // Load matlab data from matlab file .mat
     MATFile *pmat = matOpen(filename, "r");
     if (!pmat) {
-        std::cerr << "Error : Impossible to open  " << filename << std::endl;
+        std::cerr << "Error : Impossible to open : " << filename << std::endl;
         exit(1);
     }
 
     // Exctract variable from file
     mxArray *array = matGetVariable(pmat, variableName);
     if (!array) {
-        std::cerr << "Erreur : Variable '" << variableName << "' not found" << std::endl;
+        std::cerr << "Erreur : Variable : '" << variableName << "' not found" << std::endl;
         matClose(pmat);
         exit(1);
     }
@@ -79,6 +79,7 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
     std::set<uint8_t> set_bones;
     set_bones.insert(11);
     // set_bones.insert(71);
+    set_bones.insert(17);
 
     std::set<uint8_t> set_tooth;
     // set_tooth.insert(11);
@@ -96,7 +97,7 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
 
     std::set<uint8_t> set_applied;
 
-    set_applied = set_brain;
+    set_applied = set_all;
 
     int count = 0;
     for (size_t i=0; i<rows*cols*slices; i++) {
@@ -183,7 +184,16 @@ void Savemsh(C3t3 &c3t3, const char* name){   // Have to check differences betwe
         auto cell = fit->first;
         int i = fit->second;
 
-        int patch_id = c3t3.surface_patch_index(*fit).first; // label
+        int patch_id_1 = c3t3.surface_patch_index(*fit).first; // label zone 1
+        int patch_id_2 = c3t3.surface_patch_index(*fit).second; // label zone 2
+
+        int patch_id = min(patch_id_1, patch_id_2); // Test (on ne prends pas les doublons)
+
+        patch_id_1 = patch_id_1==0 ? 100 : patch_id_1; 
+        patch_id_2 = patch_id_2==0 ? 100 : patch_id_2;
+
+        patch_id = patch_id==0 ? 100 : patch_id;
+
         std::vector<int> nodes;
 
         for (int j = 0; j < 4; ++j) {
@@ -192,9 +202,15 @@ void Savemsh(C3t3 &c3t3, const char* name){   // Have to check differences betwe
         }
 
         // Triangle: type 2
-        mesh_file << elem_index++ << " 2 2 " << patch_id << " " << patch_id << " "
+        // mesh_file << elem_index++ << " 2 2 " << patch_id_1 << " " << patch_id_1 << " "
+        //     << nodes[0] << " " << nodes[1] << " " << nodes[2] << "\n";
+        // mesh_file << elem_index++ << " 2 2 " << patch_id_2 << " " << patch_id_2 << " "
+        //     << nodes[0] << " " << nodes[1] << " " << nodes[2] << "\n";
+        mesh_file << elem_index++ << " 2 2 " << patch_id<< " " << patch_id << " "
             << nodes[0] << " " << nodes[1] << " " << nodes[2] << "\n";
+
     }
+
 
     // --- 2.2 Volumes (tetrahedra) ---
     for (auto cit = c3t3.triangulation().finite_cells_begin();
@@ -217,7 +233,7 @@ void Savemsh(C3t3 &c3t3, const char* name){   // Have to check differences betwe
 int main(int argc, char* argv[])
 {
 
-    const char* path = "../tete.mat";
+    const char* path = "../main.mat";
     const char* name = "data";
 
     // const char* path = "../../Alvar_v16.mat";
@@ -230,19 +246,19 @@ int main(int argc, char* argv[])
     Mesh_domain domain = Mesh_domain::create_labeled_image_mesh_domain(img);
 
     // Mesh criteria
-    Mesh_criteria criteria(params::facet_angle(30).facet_size(4).facet_distance(4).
-                                    cell_radius_edge_ratio(3).cell_size(8));
+    Mesh_criteria criteria(params::facet_angle(30).facet_size(3).facet_distance(3).
+                                    cell_radius_edge_ratio(2).cell_size(2));
 
     C3t3 c3t3 = CGAL::make_mesh_3<C3t3>(domain, criteria, params::lloyd().odt().perturb().exude());
 
 
     // Output
-    // std::ofstream medit_file("meshs/bones2.mesh");
+    // std::ofstream medit_file("meshs/hand_bones.mesh");
     // c3t3.output_to_medit(medit_file, false);    // Rebind to false | (use CGAL::IO::output_to_medit which is deprecated (should use CGAL::IO::write_MEDIT))
-    // // CGAL::IO::write_MEDIT(medit_file, c3t3, params::all_cells(false).all_vertices(true));    // Should be equivalent to the line before but it's not exactly the case (have to check between CGAL::IO::write_MEDIT and CGAL::IO::output_to_medit (deprecated))
+    // CGAL::IO::write_MEDIT(medit_file, c3t3, params::all_cells(false).all_vertices(true));    // Should be equivalent to the line before but it's not exactly the case (have to check between CGAL::IO::write_MEDIT and CGAL::IO::output_to_medit (deprecated))
     // medit_file.close();
 
-    Savemsh(c3t3, "brain");
+    Savemsh(c3t3, "hand_all_2");
 
     return 0;
 }
