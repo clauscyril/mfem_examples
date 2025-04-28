@@ -8,11 +8,15 @@ using namespace mfem;
 using namespace std;
 
 
-real_t q_func(const Vector &x)
+real_t q_func(const Vector &x, real_t &t)
 {
-    if (abs(x(0)) < 0.2 and abs(x(1)) < 0.2) 
-        return 1.;
-    return 0.;
+    if (t < 1000)
+        if ((x(0) < -0.45) or (x(0) > 0.45))
+            return 1.;
+        else 
+            return 0.;
+    else 
+        return 0;
 }
 
 class DG_Solver : public Solver
@@ -30,12 +34,12 @@ public:
              BlockILU::Reordering::MINIMUM_DISCARDED_FILL),
         dt(-1.0)
    {
-      linear_solver.iterative_mode = false;
-      linear_solver.SetRelTol(1e-9);
-      linear_solver.SetAbsTol(0.0);
-      linear_solver.SetMaxIter(100);
-      linear_solver.SetPrintLevel(0);
-      linear_solver.SetPreconditioner(prec);
+        linear_solver.iterative_mode = false;
+        linear_solver.SetRelTol(1e-9);
+        linear_solver.SetAbsTol(0.0);
+        linear_solver.SetMaxIter(100);
+        linear_solver.SetPrintLevel(0);
+        linear_solver.SetPreconditioner(prec);
    }
 
    void SetTimeStep(real_t dt_)
@@ -92,17 +96,21 @@ public:
 
 int main() {
 
-    int vis_steps = 5;
+    int vis_steps = 1000;
     bool visualization = true;
     int precision = 8;
 
-    real_t t_final = 5.;
-    real_t dt = 0.05;
+    real_t t_final = 100000.;
+    real_t dt = 0.1;
+    real_t t = 0.;
 
-    real_t rho_ = 1.;
-    real_t c_ = 1.;
+    // real_t rho_ = 1.;
+    // real_t c_ = 1.;
 
-    real_t k_ = 1.;
+    real_t rho_times_c_ = 3.9e6;
+    // real_t rho_times_c_ = 1e6;
+
+    real_t k_ = 0.533;
 
     unique_ptr<ODESolver> ode_solver = ODESolver::Select(4); // Runge kuta
 
@@ -110,7 +118,11 @@ int main() {
     int order = 1;  
 
     const char *path = "../Disque2.msh";
+    // const char* path = "D:/Documents/projets/MFEM/mfem/data/periodic-hexagon.mesh";
     Mesh mesh(path, 1, 1);
+
+    mesh.UniformRefinement();
+    // mesh.UniformRefinement();
 
     int ne = mesh.GetNE();
     int dim = mesh.Dimension();
@@ -132,9 +144,9 @@ int main() {
 
 
     GridFunction T(fespace);
+    T = 0;
 
-
-    FunctionCoefficient q_function(q_func);
+    FunctionCoefficient q_function([&](const Vector &x) { return q_func(x, t); });
     LinearForm q = LinearForm(fespace);
     q.AddDomainIntegrator(new DomainLFIntegrator(q_function));
 
@@ -142,10 +154,11 @@ int main() {
     BilinearForm m = BilinearForm(fespace);
     BilinearForm k = BilinearForm(fespace);
 
-    ConstantCoefficient alpha(rho_*c_);
+    // ConstantCoefficient alpha(rho_*c_);
+    ConstantCoefficient alpha(rho_times_c_);
     m.AddDomainIntegrator(new MassIntegrator(alpha));
 
-    ConstantCoefficient k_coef(k_);
+    ConstantCoefficient k_coef(-k_);
     k.AddDomainIntegrator(new DiffusionIntegrator(k_coef));
 
     k.Assemble();
@@ -185,7 +198,7 @@ int main() {
     // Solver
     FE_Evolution adv(m, k, q);
 
-    real_t t = 0.0;
+    // real_t t = 0.0;
     adv.SetTime(t);
     ode_solver->Init(adv);
 
@@ -200,6 +213,13 @@ int main() {
 
         done = (t >= t_final - 1e-8*dt);
 
+        adv.SetTime(t);
+        q_function.SetTime(t);
+        // Vector Point(2);
+        // Point(0) = 0.4814586436738996;
+        // Point(1) = 0.1348983855785123;
+        // std::cout << q_function.Eval(Point); 
+
         if (done || ti % vis_steps == 0)
         {
             cout << "time step: " << ti << ", time: " << t << endl;
@@ -207,6 +227,7 @@ int main() {
             if (visualization)
             {
                 sout << "solution\n" << mesh << T << flush;
+                // std::cin.get(); 
             }
         
         }
