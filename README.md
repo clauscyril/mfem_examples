@@ -49,3 +49,5 @@ pacman -S mingw-w64-x86_64-hypre
 pacman -S mingw-w64-x86_64-metis
 
 pacman -S mingw-w64-x86_64-mfem
+
+pacman -S git make cmake mingw-w64-x86_64-gcc mingw-w64-x86_64-metis mingw-w64-x86_64-openblas mingw-w64-x86_64-hypre
