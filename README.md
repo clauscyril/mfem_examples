@@ -36,4 +36,16 @@ Pour compiler les exemples, suivez ces étapes :
     cmake ..
     make
     ```
+liste des commandes : 
 
+pacman -Syu
+
+pacman -S mingw-w64-x86_64-git mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make
+
+pacman -S mingw-w64-x86_64-msmpi
+
+pacman -S mingw-w64-x86_64-hypre
+
+pacman -S mingw-w64-x86_64-metis
+
+pacman -S mingw-w64-x86_64-mfem
