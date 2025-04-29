@@ -19,7 +19,7 @@ int main(int argc,char* argv[]) {
     if (argv[1]) {
         order = stoi(argv[1]);
     }
-    const char *path = "D:/Documents/projets/MFEM/mfem_examples/2D/serial/Champs_electrique_dans_pcb/floating.msh";
+    const char *path = "../floating.msh";
     Mesh mesh(path, 1, 1);
 
     int ne = mesh.GetNE();
