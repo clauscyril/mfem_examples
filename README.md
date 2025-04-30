@@ -57,6 +57,13 @@ Téléchargez MSYS2 via la [page officielle](https://www.msys2.org/) puis instal
 
 Rmq : Il faut lancer MSYS2 MINGW64
 
+Dans un premier temps, il faut mettre à jour les paquets avec :
+   ```bash
+    pacman -Syu 
+   ``` 
+
+Un fois les paquets à jour, il sufit d'installer les dépendences suivantes :
+
    ```bash
     pacman -S mingw-w64-x86_64-toolchain
     pacman -S mingw-w64-x86_64-cmake
