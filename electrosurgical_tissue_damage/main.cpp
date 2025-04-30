@@ -147,12 +147,12 @@ int main() {
     T = 0;
 
     FunctionCoefficient q_function([&](const Vector &x) { return q_func(x, t); });
-    LinearForm q = LinearForm(fespace);
+    LinearForm q(fespace);
     q.AddDomainIntegrator(new DomainLFIntegrator(q_function));
 
 
-    BilinearForm m = BilinearForm(fespace);
-    BilinearForm k = BilinearForm(fespace);
+    BilinearForm m(fespace);
+    BilinearForm k(fespace);
 
     // ConstantCoefficient alpha(rho_*c_);
     ConstantCoefficient alpha(rho_times_c_);
