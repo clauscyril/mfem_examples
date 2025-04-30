@@ -53,11 +53,11 @@ Deux options sont disponibles pour compiler MFEM sur Windows :
 Ci-dessous se trouve un guide permettant d'installer et de compiler MFEM avec [Hypre](https://github.com/hypre-space/hypre) et [Metis](http://glaros.dtc.umn.edu/gkhome/metis/metis/overview) grâce à MSYS2 
 
 ## Installation et configuration de MSYS2
-Téléchargez MSYS2 via la [page officielle](https://www.msys2.org/) puis installez le. Une fois cela fait, il est necessaire d'installer les élements necessaires à la compilation de mfem. Heureusement ceux-ci sont accéssibles via les paquets.
+Téléchargez MSYS2 via la [page officielle](https://www.msys2.org/), puis installez-le. Une fois cela fait, il est nécessaire d’installer les éléments requis pour la compilation de MFEM. Heureusement, ceux-ci sont accessibles via les paquets.
 
-Rmq : Il faut lancer MSYS2 MINGW64
+Remarque : Il faut lancer MSYS2 MINGW64.
 
-Dans un premier temps, il faut mettre à jour les paquets avec :
+Dans un premier temps, mettez à jour les paquets avec :
    ```bash
     pacman -Syu 
    ``` 
@@ -87,10 +87,14 @@ Vous pouvez obtenir le code source de MFEM en le téléchargeant depuis la [page
     cd build
     cmake -G "MSYS Makefiles" -DMFEM_USE_MPI=YES ..
    ```
-   Le parmamètre -DMFEM_USE_MPI=YES permet de préciser à cmake que l'on souhaite compiler mfem en mode parallèle, c'est à dire en prenant hypre et metis en compte.
+   Le parmamètre ***-DMFEM_USE_MPI=YES*** permet de préciser à cmake que l'on souhaite compiler mfem en mode parallèle, c'est à dire en prenant hypre et metis en compte.
 
    Une fois les fichiers de compilation génerés, il ne reste plus qu'a compiler
    ```bash
     make -j $(nproc)
     make install  # Peut nécessiter les droits administrateur
    ```
+par défaut, ***make install*** copie la bibliothèque à l'emplacement suivant :
+```bash
+C:/Program Files (x86)/mfem
+```
