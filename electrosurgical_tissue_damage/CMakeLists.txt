@@ -16,6 +16,10 @@ find_package(MFEM REQUIRED)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
 
-add_executable(main main.cpp)
+add_executable(elec_damage main.cpp solver.cpp)
+
+# Pour pouvoir trouver solver.hpp
+target_include_directories(elec_damage PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 # target_link_libraries(main mfem CGAL::CGAL gmp mpfr) 
-target_link_libraries(main mfem) 
+target_link_libraries(elec_damage mfem) 
