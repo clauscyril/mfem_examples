@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
     Array<int> ess_tdof_list;
     for (int i = 0; i < mesh.GetNV(); i++) {
         const double *v = mesh.GetVertex(i);
-        if ((v[0] > 0.48 && v[2] > 0.45) or (v[0] < -0.48 && v[2] < 0.05)) {  // 
+        if (abs(v[0]) > 0.4 ) {  // 
             ess_tdof_list.Append(i);
         }
         

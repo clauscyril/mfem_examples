@@ -12,6 +12,7 @@ if(WIN32)
     string(STRIP "${MATLAB_PATH}" MATLAB_PATH)
 endif()
 
+message("path to matlab lib : ${MATLAB_PATH}")
 
 set(CMAKE_BUILD_TYPE Release)
 
@@ -54,14 +55,15 @@ include_directories(${MATLAB_INCLUDE_DIR})
 #     mpfr             # MPFR library
 # )
 
-add_executable(readMatData ${SOURCES_READMATDATA})
-target_link_libraries(readMatData mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
+# add_executable(readMatData ${SOURCES_READMATDATA})
+# target_link_libraries(readMatData mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
 
 # add_executable(generateMesh ${SOURCES_GENERATEMESH})
 # target_link_libraries(generateMesh mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
 
 add_executable(main main.cpp)
 target_link_libraries(main mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
+# target_link_libraries(main mfem CGAL::CGAL gmp mpfr mat_reader mat mx) 
 
-add_executable(import_mfem import_mfem.cpp)
-target_link_libraries(import_mfem mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 
+# add_executable(import_mfem import_mfem.cpp)
+# target_link_libraries(import_mfem mfem CGAL::CGAL gmp mpfr libmat.dll libmx.dll) 

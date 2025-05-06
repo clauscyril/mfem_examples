@@ -11,11 +11,11 @@ find_package(MFEM REQUIRED)
 # add_executable(main main.cpp)
 # target_link_libraries(main mfem) 
 
-add_executable(cas_reel Cas_reel.cpp)
-target_link_libraries(cas_reel mfem) 
+# add_executable(cas_reel Cas_reel.cpp)
+# target_link_libraries(cas_reel mfem) 
 
-# add_executable(cas_cond conduction_simple.cpp)
-# target_link_libraries(cas_cond mfem) 
+add_executable(cas_cond conduction_simple.cpp)
+target_link_libraries(cas_cond mfem) 
 
 # add_executable(test test.cpp)
 # target_link_libraries(test mfem) 

@@ -97,7 +97,7 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
 
     std::set<uint8_t> set_applied;
 
-    set_applied = set_all;
+    set_applied = set_brain;
 
     int count = 0;
     for (size_t i=0; i<rows*cols*slices; i++) {
@@ -246,8 +246,8 @@ int main(int argc, char* argv[])
     Mesh_domain domain = Mesh_domain::create_labeled_image_mesh_domain(img);
 
     // Mesh criteria
-    Mesh_criteria criteria(params::facet_angle(30).facet_size(3).facet_distance(3).
-                                    cell_radius_edge_ratio(2).cell_size(2));
+    Mesh_criteria criteria(params::facet_angle(30).facet_size(4).facet_distance(6).
+                                    cell_radius_edge_ratio(3).cell_size(4));
 
     C3t3 c3t3 = CGAL::make_mesh_3<C3t3>(domain, criteria, params::lloyd().odt().perturb().exude());
 
