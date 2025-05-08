@@ -42,6 +42,9 @@ link_directories("${MATLAB_PATH}/bin/win64")
 set(SOURCES_HEART heart.cpp)
 set(SOURCES_READMATDATA readMatData.cpp)
 set(SOURCES_GENERATEMESH generateMesh.cpp)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 include_directories(${MATLAB_INCLUDE_DIR})
 

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <mat.h>
 #include <unordered_map>
+#include <filesystem>
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
  
@@ -97,7 +98,7 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
 
     std::set<uint8_t> set_applied;
 
-    set_applied = set_brain;
+    set_applied = set_bones;
 
     int count = 0;
     for (size_t i=0; i<rows*cols*slices; i++) {
@@ -117,8 +118,21 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
 
 void Savemsh(C3t3 &c3t3, const char* name){   // Have to check differences between string and char
     // Sauvegarde du mesh au format msh, compatible mfem
-    std::ofstream mesh_file("meshs/"+std::string(name)+".msh");
+    std::ofstream mesh_file("./meshs/"+std::string(name)+".msh");
+    std::cout << "Écriture dans : " << std::filesystem::absolute("meshs/"+std::string(name)+".msh") << std::endl;
+
+    if (!std::filesystem::exists("./meshs")) {
+        std::cout << "hello" << std::endl;
+        std::filesystem::create_directory("./meshs");
+    }
+
+    if (!mesh_file) {
+        std::cerr << "Erreur : impossible d'ouvrir le fichier pour écriture.\n";
+        return;
+    }
     mesh_file << "$MeshFormat\n2.2 0 8\n$EndMeshFormat\n";
+
+
 
     // Wrtiting the vertices 
     std::unordered_map<Tr::Vertex_handle, int> vertex_indices;   
@@ -258,7 +272,7 @@ int main(int argc, char* argv[])
     // CGAL::IO::write_MEDIT(medit_file, c3t3, params::all_cells(false).all_vertices(true));    // Should be equivalent to the line before but it's not exactly the case (have to check between CGAL::IO::write_MEDIT and CGAL::IO::output_to_medit (deprecated))
     // medit_file.close();
 
-    Savemsh(c3t3, "hand_all_2");
+    Savemsh(c3t3, "hand_bones");
 
     return 0;
 }
