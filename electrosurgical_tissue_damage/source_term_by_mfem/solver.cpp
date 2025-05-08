@@ -6,7 +6,7 @@
 using namespace mfem;
 
 
-void compute_Q(const Mesh &mesh, FiniteElementSpace *fespace, GridFunction &q){
+void compute_Q(Mesh &mesh, FiniteElementSpace *fespace, GridFunction &q){
     int affichage = 1;
     std::cout << "Computing q using fem" << std::endl;
 
@@ -14,9 +14,15 @@ void compute_Q(const Mesh &mesh, FiniteElementSpace *fespace, GridFunction &q){
     Array<int> ess_tdof_list;
     for (int i = 0; i < mesh.GetNV(); i++) {
         const double *u = mesh.GetVertex(i);
-        if ((u[0] + 0.35)*(u[0]+0.35) + (u[1])*(u[1]) <= 0.05*0.05 or (u[0] - 0.35)*(u[0]-0.35) + (u[1])*(u[1]) <= 0.05*0.05) {  // Vérifie si y = 0
+        // if ((u[0] + 10e-3)*(u[0]+10e-3) + (u[1])*(u[1]) <= 2e-3*2e-3 or (u[0] - 10e-3)*(u[0]-10e-3) + (u[1])*(u[1]) <= 2e-3*2e-3) {  // Vérifie si y = 0
+        //     ess_tdof_list.Append(i);
+        // } 
+        // if ((u[0] + 15.6e-3)*(u[0]+15.6e-3) + (u[1]-0.9e-3)*(u[1]-0.9e-3) <= 0.4e-3*0.4e-3 or ((u[0] + 15.6e-3)*(u[0]+15.6e-3) + (u[1]+0.9e-3)*(u[1]+0.9e-3) <= 0.4e-3*0.4e-3)) {  // Vérifie si y = 0
+        //     ess_tdof_list.Append(i);
+        // }
+        if ((u[0] > -2.8e-3 and u[0] < -2e-3 and abs(u[1]) < 0.4e-3) or (u[0] < 2.8e-3 and u[0] > 2e-3 and abs(u[1]) < 0.4e-3)){
             ess_tdof_list.Append(i);
-        } 
+        }
     }
 
     GridFunction v(fespace);
@@ -25,9 +31,9 @@ void compute_Q(const Mesh &mesh, FiniteElementSpace *fespace, GridFunction &q){
     for (int i = 0; i < ess_tdof_list.Size(); i++){
         const double *u = mesh.GetVertex(ess_tdof_list[i]);
         if (u[0] > 0) {
-            v(ess_tdof_list[i]) = 1.f;
+            v(ess_tdof_list[i]) = 120/sqrt(2);
         } else {
-            v(ess_tdof_list[i]) = -1.f;
+            v(ess_tdof_list[i]) = 0.f;
         }
     }
 
@@ -52,10 +58,30 @@ void compute_Q(const Mesh &mesh, FiniteElementSpace *fespace, GridFunction &q){
     // On récupère les solutions 
     a.RecoverFEMSolution(B, b, v);
 
+    GradientGridFunctionCoefficient grad_v_coeff(&v);
 
-    GradNormSquaredCoefficient grad_v_squared(v);
+    FiniteElementCollection *fec_grad = new ND_FECollection(1, 2);  // Raviart-Thomas (RT) pour le gradient
+    FiniteElementSpace *fespace_grad = new FiniteElementSpace(&mesh, fec_grad);
+    
+    GridFunction grad_v(fespace_grad);
 
-    q.ProjectCoefficient(grad_v_squared);
+    grad_v.ProjectCoefficient(grad_v_coeff);
+    GridFunction E(fespace_grad);
+    E -= grad_v;
+    E *= 0.258;
+
+
+
+
+
+
+
+
+
+    QCoefficient q_coeff(v);
+    // ProductCoefficient product(&grad_v, &grad_v);
+
+    q.ProjectCoefficient(q_coeff);
 
     // Visualisation GLVis
     if (affichage){
@@ -69,23 +95,23 @@ void compute_Q(const Mesh &mesh, FiniteElementSpace *fespace, GridFunction &q){
 
             socketstream sol_sock_q(vishost, visport);
             sol_sock_q.precision(8);
-            sol_sock_q << "solution\n" << mesh << q
-                        << "window_title 'Solution: q'" 
+            sol_sock_q << "solution\n" << mesh << E
+                        << "window_title 'Solution: E'" 
                         << "pause\n" << "keys c\n" << std::flush;
     }
         
 }
 
 
-GradNormSquaredCoefficient::GradNormSquaredCoefficient(const GridFunction &gf_)
+QCoefficient::QCoefficient(const GridFunction &gf_)
     : gf(gf_), grad_coeff(&gf_),
       grad(gf_.FESpace()->GetMesh()->SpaceDimension()) {}
 
-real_t GradNormSquaredCoefficient::Eval(ElementTransformation &T,
-                                        const IntegrationPoint &ip)
+real_t QCoefficient::Eval(ElementTransformation &T,
+                                    const IntegrationPoint &ip)
 {
     grad_coeff.Eval(grad, T, ip);
-    return pow(grad.Norml2(),2);
+    return 0.258 * pow(grad.Norml2(),2);
 }
 
 DG_Solver::DG_Solver(SparseMatrix &M_, SparseMatrix &K_, const FiniteElementSpace &fes)

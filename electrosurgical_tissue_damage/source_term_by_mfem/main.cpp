@@ -13,12 +13,12 @@ using namespace std;
 
 int main() {
 
-    int vis_steps = 1000;
+    int vis_steps = 1;
     bool visualization = true;
     int precision = 8;
 
-    real_t t_final = 100000.;
-    real_t dt = 0.1;
+    real_t t_final = 3;
+    real_t dt = 0.04;
     real_t t = 0.;
 
     // real_t rho_ = 1.;
@@ -34,8 +34,26 @@ int main() {
    
     int order = 1;  
 
-    const char *path = "../disque.msh";
-    Mesh mesh(path, 1, 1);
+
+
+    // Mesh Carré généré par mfem
+    int nx = 100, ny = 100;
+    double sx = 0.032, sy = 0.032;
+
+    Mesh mesh = Mesh::MakeCartesian2D(nx, ny, Element::QUADRILATERAL, true, sx, sy);
+
+    // Centrer le maillage autour de (0,0)
+    for (int i = 0; i < mesh.GetNV(); i++) // GetNV() = number of vertices
+    {
+        double *v = mesh.GetVertex(i);
+        v[0] -= sx / 2.0;  // Translation en x
+        v[1] -= sy / 2.0;  // Translation en y
+    }
+
+
+    // // Mesh issu de gmsh 
+    // const char *path = "../disque.msh";
+    // Mesh mesh(path, 1, 1);
 
     int ne = mesh.GetNE();
     int dim = mesh.Dimension();
@@ -65,7 +83,7 @@ int main() {
     GridFunctionCoefficient q_coeff(&q_grid);
 
     GridFunction T(fespace);
-    T = 0;
+    T = 37;
 
 
     LinearForm q(fespace);

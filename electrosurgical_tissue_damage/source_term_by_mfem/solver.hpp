@@ -7,11 +7,11 @@ using namespace mfem;
 
 /// Fonction source temporaire
 
-void compute_Q(const Mesh &mesh, FiniteElementSpace *fespace, GridFunction &q);
+void compute_Q(Mesh &mesh, FiniteElementSpace *fespace, GridFunction &q);
 
 
 // Class permettant de donner le carré du gradient en tant que coefficient ()
-class GradNormSquaredCoefficient : public mfem::Coefficient
+class QCoefficient : public mfem::Coefficient
 {
 private:
     const mfem::GridFunction &gf;
@@ -19,7 +19,7 @@ private:
     mutable mfem::Vector grad;
 
 public:
-    GradNormSquaredCoefficient(const mfem::GridFunction &gf_);
+    QCoefficient(const mfem::GridFunction &gf_);
     virtual real_t Eval(mfem::ElementTransformation &T, const mfem::IntegrationPoint &ip);
 };
 
