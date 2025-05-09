@@ -34,17 +34,17 @@ void compute_V(Mesh &mesh, FiniteElementSpace *fespace, Array<int> &ess_tdof_lis
 
 
 
-    GradientGridFunctionCoefficient grad_v_coeff(&v);
+    // GradientGridFunctionCoefficient grad_v_coeff(&v);
 
-    FiniteElementCollection *fec_grad = new RT_FECollection(1, 2);  // Raviart-Thomas (RT) pour le gradient
-    FiniteElementSpace *fespace_grad = new FiniteElementSpace(&mesh, fec_grad);
+    // FiniteElementCollection *fec_grad = new RT_FECollection(1, 2);  // Raviart-Thomas (RT) pour le gradient
+    // FiniteElementSpace *fespace_grad = new FiniteElementSpace(&mesh, fec_grad);
     
-    GridFunction grad_v(fespace_grad);
+    // GridFunction grad_v(fespace_grad);
 
-    grad_v.ProjectCoefficient(grad_v_coeff);
-    GridFunction E(fespace_grad);
-    E -= grad_v;
-    E *= 0.258;
+    // grad_v.ProjectCoefficient(grad_v_coeff);
+    // GridFunction E(fespace_grad);
+    // E -= grad_v;
+    // E *= 0.258;
 
 
 
@@ -69,11 +69,11 @@ void compute_V(Mesh &mesh, FiniteElementSpace *fespace, Array<int> &ess_tdof_lis
                     << "window_title 'Solution: Potentiel'" 
                     << "pause\n" << "keys c\n" << std::flush;
 
-        socketstream sol_sock_q(vishost, visport);
-        sol_sock_q.precision(8);
-        sol_sock_q << "solution\n" << mesh << E
-                    << "window_title 'Solution: E'" 
-                    << "pause\n" << "keys c\n" << std::flush;
+        // socketstream sol_sock_q(vishost, visport);
+        // sol_sock_q.precision(8);
+        // sol_sock_q << "solution\n" << mesh << E
+        //             << "window_title 'Solution: E'" 
+        //             << "pause\n" << "keys c\n" << std::flush;
     }
         
 }
@@ -96,8 +96,8 @@ real_t QCoefficient::Eval(ElementTransformation &T,
     norml2 *= norml2;
 
     float phase = fmod(time, period);
-    if (phase < t_on) 
-        return 0.258 * norml2;
+    if (phase < t_on and time < 3.5) 
+        return 0.33 * norml2;
     return 0;
 }
 

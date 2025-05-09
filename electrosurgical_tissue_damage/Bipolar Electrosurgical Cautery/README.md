@@ -1,1 +1,1 @@
-Exemple inspré de cet article : https://asmedigitalcollection.asme.org/manufacturingscience/article/doi/10.1115/1.2902858/462167/ThermalElectric-Finite-Element-Analysis-and
+Exemple inspiré de cet article : https://asmedigitalcollection.asme.org/manufacturingscience/article/doi/10.1115/1.2902858/462167/ThermalElectric-Finite-Element-Analysis-and
