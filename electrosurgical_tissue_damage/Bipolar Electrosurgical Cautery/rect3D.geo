@@ -4,7 +4,7 @@ SetFactory("OpenCASCADE");
 // Dimensions
 Lx = 0.01;
 Ly = 0.0045;
-Lz = 0.02;
+Lz = 0.01;
 
 // Mesh size
 lc = 0.0003;
@@ -16,7 +16,7 @@ Rectangle(1) = {0, 0, 0, Lx, Ly, 0};
 // Extrude along Z to form the 3D volume
 // Save all created entities
 out[] = Extrude {0, 0, Lz} {
-  Surface{1}; Layers{20}; Recombine;
+  Surface{1}; Layers{15}; Recombine;
 };
 
 // Physical Volume (entire 3D region)
