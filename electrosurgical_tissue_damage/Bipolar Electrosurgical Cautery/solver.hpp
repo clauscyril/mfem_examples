@@ -9,6 +9,8 @@ using namespace mfem;
 
 void compute_V(Mesh &mesh, FiniteElementSpace *fespace, Array<int> &ess_tdof_list, GridFunction &v);
 
+real_t dir_bc_func(const Vector &x);
+
 
 // Class permettant de donner le carré du gradient en tant que coefficient ()
 class QCoefficient : public mfem::Coefficient

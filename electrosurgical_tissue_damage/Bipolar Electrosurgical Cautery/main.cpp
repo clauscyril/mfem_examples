@@ -21,10 +21,12 @@ int main()
 
     real_t rho_times_c_ = 3.9e6;
 
-    real_t k_ = 0.133;
+    real_t k_ = 0.533;
 
-    real_t V0 = 100/sqrt(2);
+    // real_t V0 = 100/sqrt(2);
 
+
+    
     unique_ptr<ODESolver> ode_solver = ODESolver::Select(4); // Runge kuta
 
     int order = 1;
@@ -46,7 +48,10 @@ int main()
     else
     {
         // Mesh issu de gmsh
-        const char *path = "../rect3D.msh";
+        // const char *path = "../square.msh";
+        // const char *path = "../rect3D.msh";
+        // const char *path = "../meshOnshape_test.msh";
+        const char *path = "../new_mesh2_export.msh";
         mesh = new Mesh(path, 1, 1);
     }
 
@@ -69,97 +74,160 @@ int main()
     int id(0);
     int id_1mm(0);
 
-    real_t x = 1.5125e-3;
-    real_t y = 2.25e-3;
-    real_t d_min = 1;
+    // real_t x = 1.5125e-3;
+    // real_t y = 2.25e-3;
+    // real_t d_min = 1;
 
-    real_t x_1mm = 2.875e-3;
-    real_t y_1mm = 2.25e-3;
-    real_t d_min_1mm = 1;
+    // real_t x_1mm = 2.875e-3;
+    // real_t y_1mm = 2.25e-3;
+    // real_t d_min_1mm = 1;
 
-    real_t z = 18e-3;
+    // real_t z = 8e-3;
 
 
-    // On détermines les conditions aux limites de type Dirichlet du potentiel ici. (Permet de généraliser le fichier solver)
-    Array<int> ess_tdof_list;
-    for (int i = 0; i < mesh->GetNV(); i++)
+    for (int i = 0; i < mesh->GetNV(); i++) // GetNV() = number of vertices
     {
-        // On cherche d'abord les noeuds les plus proches de là ou l'on souhaite mesurer T
-        const double *u = mesh->GetVertex(i);
-        real_t d, d_1mm;
-        if (dim == 2){
-            d = sqrt(pow(u[0] - x,2) + pow(u[1] - y,2));
-            d_1mm = sqrt(pow(u[0] - x_1mm,2) + pow(u[1] - y_1mm,2));
-        } else {
-            d = sqrt(pow(u[0] - x,2) + pow(u[1] - y,2) + pow(u[2] - z, 2));
-            d_1mm = sqrt(pow(u[0] - x_1mm,2) + pow(u[1] - y_1mm,2) + pow(u[2] - z, 2));
-        }
-        if (d < d_min) {
-            d_min = d;
-            id = i;
-        } else if(d_1mm < d_min_1mm) {
-            d_min_1mm = d_1mm;
-            id_1mm = i;
-        }
-
-        // Electrodes carrées
-        if (abs(u[0] - 1.5125e-3) < 1.15e-3 and (u[1] <= 1.125e-3 or u[1] >= 3.25e-3))
-        {
-            if (dim == 3) {
-                if (u[2] > 15e-3) {
-                    ess_tdof_list.Append(i);
-                }
-            } else {
-                ess_tdof_list.Append(i);
-            } 
-        }
-
-        // // Électrode circulaire
-        // if ( (pow(u[0] - 1.5125e-3, 2) + pow(u[1] - 4.5e-3,2) <=  pow(1.25e-3,2)) or (pow(u[0] - 1.5125e-3, 2) + pow(u[1],2) <=  pow(1.25e-3,2) ))
-        // {
-        //     ess_tdof_list.Append(i);
-        // }
+        double *v = mesh->GetVertex(i);
+        v[0] *= 1e-3;  // Translation en x
+        v[1] *= 1e-3;  // Translation en y
+        v[2] *= 1e-3;
     }
 
-    // Affiche les noeuds les plus proches des positions où l'on souhaite mesurer T
-    real_t *u = mesh->GetVertex(id);
-    std::cout << "id : " << id << ", x = " << u[0] << ", y = " << u[1] << std::endl;
-    u = mesh->GetVertex(id_1mm);
-    std::cout << "id : " << id_1mm << ", x = " << u[0] << ", y = " << u[1] << std::endl;
+
+
+
+    // // On détermines les conditions aux limites de type Dirichlet du potentiel ici. (Permet de généraliser le fichier solver)
+    // Array<int> ess_tdof_list;
+    // for (int i = 0; i < mesh->GetNV(); i++)
+    // {
+    //     // On cherche d'abord les noeuds les plus proches de là ou l'on souhaite mesurer T
+    //     const double *u = mesh->GetVertex(i);
+    //     real_t d, d_1mm;
+    //     if (dim == 2){
+    //         d = sqrt(pow(u[0] - x,2) + pow(u[1] - y,2));
+    //         d_1mm = sqrt(pow(u[0] - x_1mm,2) + pow(u[1] - y_1mm,2));
+    //     } else {
+    //         d = sqrt(pow(u[0] - x,2) + pow(u[1] - y,2) + pow(u[2] - z, 2));
+    //         d_1mm = sqrt(pow(u[0] - x_1mm,2) + pow(u[1] - y_1mm,2) + pow(u[2] - z, 2));
+    //     }
+    //     if (d < d_min) {
+    //         d_min = d;
+    //         id = i;
+    //     } else if(d_1mm < d_min_1mm) {
+    //         d_min_1mm = d_1mm;
+    //         id_1mm = i;
+    //     }
+
+    //     // Electrodes carrées
+    //     if (abs(u[0] - 1.5125e-3) < 1.15e-3 and (u[1] <= 1.125e-3 or u[1] >= 3.25e-3))
+    //     {
+    //         if (dim == 3) {
+    //             if (u[2] > 6e-3) {
+    //                 ess_tdof_list.Append(i);
+    //             }
+    //         } else {
+    //             ess_tdof_list.Append(i);
+    //         } 
+    //     }
+
+    //     // // Électrode circulaire
+    //     // if ( (pow(u[0] - 1.5125e-3, 2) + pow(u[1] - 4.5e-3,2) <=  pow(1.25e-3,2)) or (pow(u[0] - 1.5125e-3, 2) + pow(u[1],2) <=  pow(1.25e-3,2) ))
+    //     // {
+    //     //     ess_tdof_list.Append(i);
+    //     // }
+    // }
+
+    // // Affiche les noeuds les plus proches des positions où l'on souhaite mesurer T
+    // real_t *u = mesh->GetVertex(id);
+    // std::cout << "id : " << id << ", x = " << u[0] << ", y = " << u[1] << std::endl;
+    // u = mesh->GetVertex(id_1mm);
+    // std::cout << "id : " << id_1mm << ", x = " << u[0] << ", y = " << u[1] << std::endl;
+
+    // GridFunction v(fespace);
+    // v = 0.f;
+
+    // for (int i = 0; i < ess_tdof_list.Size(); i++)
+    // {
+    //     const double *u = mesh->GetVertex(ess_tdof_list[i]);
+    //     if (u[1] > sy / 2)
+    //     {
+    //         v(ess_tdof_list[i]) = V0;
+    //     }
+    //     else
+    //     {
+    //         v(ess_tdof_list[i]) = 0.f;
+    //     }
+    // }
+
+
+    //     for (int i = 0; i < ess_tdof_list.Size(); i++)
+    // {
+    //     const double *u = mesh->GetVertex(ess_tdof_list[i]);
+    //     if (u[1] > sy / 2)
+    //     {
+    //         v(ess_tdof_list[i]) = V0;
+    //     }
+    //     else
+    //     {
+    //         v(ess_tdof_list[i]) = 0.f;
+    //     }
+    // }
+
+    std::cout << "Bdr Attribute size : " << mesh->bdr_attributes.Max() << std::endl;
+
+
+    // // Cas Reel 3D
+    // Vector Dirichlet_vect_V(mesh->bdr_attributes.Max());
+    // Dirichlet_vect_V = 0.; // On initialise toutes les surfaces avec aucune condition
+    // Dirichlet_vect_V[92] = V0;   // La surface d'indice 85(gmsh), soit 84(mfem)  est considéré comme un surface avec conditions aux limites
+    // Dirichlet_vect_V[93] = 0.;   // La surface d'indice 86(gmsh), soit 85(mfem)  est considéré comme un surface avec conditions aux limites
+    // // Dirichlet_vect_V[84] = V0;   // La surface d'indice 85(gmsh), soit 84(mfem)  est considéré comme un surface avec conditions aux limites
+    // // Dirichlet_vect_V[85] = 0.;   // La surface d'indice 86(gmsh), soit 85(mfem)  est considéré comme un surface avec conditions aux limites
+    // PWConstCoefficient dirichlet_val(Dirichlet_vect_V);
+
+
+    // Array<int> Dirichlet_list_V(mesh->bdr_attributes.Max());
+    // Dirichlet_list_V = 0; // On initialise toutes les surfaces avec aucune condition
+    // Dirichlet_list_V[92] = 1;   // La surface d'indice 85(gmsh), soit 84(mfem)  est considéré comme un surface avec conditions aux limites
+    // Dirichlet_list_V[93] = 1;   // La surface d'indice 86(gmsh), soit 85(mfem)  est considéré comme un surface avec conditions aux limites
+    // // Dirichlet_list_V[84] = 1;   // La surface d'indice 85(gmsh), soit 84(mfem)  est considéré comme un surface avec conditions aux limites
+    // // Dirichlet_list_V[85] = 1;   // La surface d'indice 86(gmsh), soit 85(mfem)  est considéré comme un surface avec conditions aux limites
+
+
+    // Array<int> ess_tdof_list;
+    // fespace->GetEssentialTrueDofs(Dirichlet_list_V, ess_tdof_list);
+
+    // GridFunction v(fespace);
+    // v.ProjectBdrCoefficient(dirichlet_val, ess_tdof_list);
+
+
+    // // Cas 2D de test des conditions aux limits RMQ !! Il faut changer la fonction dir_bc_func dans solver.cpp
+    // Array<int> dir_bdr_v(mesh->bdr_attributes.Max());
+    // dir_bdr_v = 0;
+    // dir_bdr_v[0] = 1;
+    // dir_bdr_v[2] = 1;
+
+
+    // Cas 3D reel :
+    Array<int> dir_bdr_v(mesh->bdr_attributes.Max());
+    dir_bdr_v = 0;
+    dir_bdr_v[92] = 1;
+    dir_bdr_v[93] = 1;
+
+
+    Array<int> ess_tdof_list;
+    fespace->GetEssentialTrueDofs(dir_bdr_v, ess_tdof_list);
+    
 
     GridFunction v(fespace);
-    v = 0.f;
+    FunctionCoefficient dir_bc_coef(dir_bc_func);
 
-    for (int i = 0; i < ess_tdof_list.Size(); i++)
-    {
-        const double *u = mesh->GetVertex(ess_tdof_list[i]);
-        if (u[1] > sy / 2)
-        {
-            v(ess_tdof_list[i]) = V0;
-        }
-        else
-        {
-            v(ess_tdof_list[i]) = 0.f;
-        }
-    }
-
-
-        for (int i = 0; i < ess_tdof_list.Size(); i++)
-    {
-        const double *u = mesh->GetVertex(ess_tdof_list[i]);
-        if (u[1] > sy / 2)
-        {
-            v(ess_tdof_list[i]) = V0;
-        }
-        else
-        {
-            v(ess_tdof_list[i]) = 0.f;
-        }
-    }
-
+    std::cout << "test" << std::endl;
+    v.ProjectBdrCoefficient(dir_bc_coef, dir_bdr_v);
 
     // Calcul le potentiel V à partir des conditions aux limites préicsées
     compute_V(*mesh, fespace, ess_tdof_list, v);
+
 
     // À partir de ce potentiel, on peut determiner le terme source q
     real_t periode = 0.22 + 0.56;
@@ -186,12 +254,11 @@ int main()
     // robin_bdr[2] = 1; // Haut (attribut 3 → index 2)
 
     // 3D 
-    robin_bdr[3] = 1; // Bas 
-    robin_bdr[5] = 1; // Haut
+    robin_bdr[86] = 1; // Bas 
 
     Array<int> dirichlet_bdr(mesh->bdr_attributes.Max());
     dirichlet_bdr = 0;
-    dirichlet_bdr[4] = 1;
+    dirichlet_bdr[87] = 1;
 
     ConstantCoefficient T_D(31.0);
     T.ProjectBdrCoefficient(T_D, dirichlet_bdr);
@@ -300,3 +367,4 @@ int main()
     delete mesh;
     return 0;
 }
+

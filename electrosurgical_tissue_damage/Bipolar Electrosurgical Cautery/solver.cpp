@@ -6,9 +6,19 @@
 using namespace mfem;
 
 
+real_t dir_bc_func(const Vector &x){
+    real_t V0 = 100/sqrt(2);
+    if (x[2] <= 2e-3) {
+        return (real_t)0.;
+    } else {
+        return V0; 
+    }
+}
+
+
 void compute_V(Mesh &mesh, FiniteElementSpace *fespace, Array<int> &ess_tdof_list, GridFunction &v){
     int affichage = 1;
-    std::cout << "Computing q using fem" << std::endl;
+    std::cout << "Computing v using fem" << std::endl;
 
 
     LinearForm b(fespace);
@@ -24,6 +34,7 @@ void compute_V(Mesh &mesh, FiniteElementSpace *fespace, Array<int> &ess_tdof_lis
     OperatorPtr A;
     Vector B, V;
 
+    std::cout << "test3" << std::endl;
     a.FormLinearSystem(ess_tdof_list, v, b, A, V, B);
     GSSmoother M((SparseMatrix&)(*A));
     PCG(*A, M, B, V, 1, 1000, 1e-12, 0.f);
@@ -31,7 +42,7 @@ void compute_V(Mesh &mesh, FiniteElementSpace *fespace, Array<int> &ess_tdof_lis
     // On récupère les solutions 
     a.RecoverFEMSolution(B, b, v);
 
-
+    std::cout << "test 4" << std::endl;
 
 
     // GradientGridFunctionCoefficient grad_v_coeff(&v);
