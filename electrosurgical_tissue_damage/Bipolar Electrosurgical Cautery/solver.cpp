@@ -6,14 +6,6 @@
 using namespace mfem;
 
 
-real_t dir_bc_func(const Vector &x){
-    real_t V0 = 100/sqrt(2);
-    if (x[2] <= 2e-3) {
-        return (real_t)0.;
-    } else {
-        return V0; 
-    }
-}
 
 
 void compute_V(Mesh &mesh, FiniteElementSpace *fespace, Array<int> &ess_tdof_list, GridFunction &v){
