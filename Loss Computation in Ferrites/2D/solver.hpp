@@ -54,3 +54,10 @@ public:
 #endif // SOLVERS_HPP
 
 
+
+real_t bdr_func(const Vector &x);
+real_t inv_r_square_func(const Vector &x);
+
+
+real_t GetPowerLoss(const char *path, real_t fc, real_t fc_mu);
+

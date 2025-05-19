@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 11)
 find_package(MFEM REQUIRED)
 
 
-add_executable(main main.cpp get_curl.cpp)
+add_executable(main main.cpp solver.cpp)
 
 # Pour pouvoir trouver solver.hpp
 target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
