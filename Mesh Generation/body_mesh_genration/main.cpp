@@ -98,7 +98,7 @@ CGAL::Image_3 getMatlabImage(const char *filename, const char *variableName){
 
     std::set<uint8_t> set_applied;
 
-    set_applied = set_bones;
+    set_applied = set_all;
 
     int count = 0;
     for (size_t i=0; i<rows*cols*slices; i++) {
@@ -261,18 +261,18 @@ int main(int argc, char* argv[])
 
     // Mesh criteria
     Mesh_criteria criteria(params::facet_angle(30).facet_size(4).facet_distance(6).
-                                    cell_radius_edge_ratio(3).cell_size(4));
+                                    cell_radius_edge_ratio(4).cell_size(3));
 
     C3t3 c3t3 = CGAL::make_mesh_3<C3t3>(domain, criteria, params::lloyd().odt().perturb().exude());
 
 
     // Output
-    // std::ofstream medit_file("meshs/hand_bones.mesh");
+    std::ofstream medit_file("meshs/hand_all_2.mesh");
     // c3t3.output_to_medit(medit_file, false);    // Rebind to false | (use CGAL::IO::output_to_medit which is deprecated (should use CGAL::IO::write_MEDIT))
-    // CGAL::IO::write_MEDIT(medit_file, c3t3, params::all_cells(false).all_vertices(true));    // Should be equivalent to the line before but it's not exactly the case (have to check between CGAL::IO::write_MEDIT and CGAL::IO::output_to_medit (deprecated))
-    // medit_file.close();
+    CGAL::IO::write_MEDIT(medit_file, c3t3, params::all_cells(false).all_vertices(true));    // Should be equivalent to the line before but it's not exactly the case (have to check between CGAL::IO::write_MEDIT and CGAL::IO::output_to_medit (deprecated))
+    medit_file.close();
 
-    Savemsh(c3t3, "hand_bones");
+    // Savemsh(c3t3, "hand_all");
 
     return 0;
 }

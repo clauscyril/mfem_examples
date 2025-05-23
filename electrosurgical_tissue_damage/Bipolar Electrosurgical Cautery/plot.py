@@ -15,14 +15,16 @@ time = data["Time"]
 temperature = data["Temperature"]
 t_1mm = data["T_1mm"]
 
-temperatur2 = data2['Temperature']
+# temperatur2 = data2['Temperature']
 
 # plt.plot(time, temperature, label="Avec convexion")
 # plt.plot(time, temperatur2, label="Sans convexion")
 
-plt.plot(time, temperature, label="Au milieu")
-plt.plot(time, t_1mm, label="À 1mm")
-
+# plt.plot(time, temperature, label="1.5mm")
+plt.plot(time, t_1mm, label="FEM 1mm")
+plt.title("Temperature evolution wtih time")
+plt.xlabel("Time (s)")
+plt.ylabel('Temperature (°C)')
 plt.grid()
 plt.legend()
 plt.show()

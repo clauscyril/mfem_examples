@@ -59,7 +59,8 @@ int main()
     int id(0);
     int id_1mm(0);
 
-    real_t x = 1.5125;
+    // real_t x = 1.5125;
+    real_t x = 2.875 + 0.5;
     real_t y = 3;
     real_t z = 2.25;
     real_t d_min = 10;
@@ -222,6 +223,7 @@ int main()
     std::ofstream data_file("./data.csv");
     data_file << "Time;Temperature;T_1mm\n0;30;30\n";
 
+    
     bool done = false;
     for (int ti = 0; !done;)
     {

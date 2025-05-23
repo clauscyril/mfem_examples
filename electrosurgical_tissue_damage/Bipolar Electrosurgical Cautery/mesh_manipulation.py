@@ -2,7 +2,7 @@ import os
 
 # Chemin du fichier source
 path = os.path.dirname(os.path.abspath(__file__))
-source_file = os.path.join(path, "meshOnshape_test.msh")
+source_file = os.path.join(path, "meshs", "Bipolar_Cautery_model.msh")
 
 # Lecture du fichier .msh
 with open(source_file, "r", encoding="utf-8") as f:
@@ -63,7 +63,7 @@ new_file_content = (
 )
 
 # Écriture du nouveau fichier
-output_file = os.path.join(path, "new_mesh2.msh")
+output_file = os.path.join(path, "meshs", "new_mesh2.msh")
 with open(output_file, "w", encoding="utf-8") as f:
     f.write(new_file_content)
 
