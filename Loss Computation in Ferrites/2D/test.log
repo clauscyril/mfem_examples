@@ -1,0 +1,65 @@
+You chose the file "C:\Users\cyril\Projets\mfem_examples\Loss Computation in Ferrites\2D\test.edp"
+-- FreeFem++ v4.15 (Wed Dec 11 16:48:56 CET 2024 - git v4.15-7-gb1e524c8c)
+   file : C:\Users\cyril\Projets\mfem_examples\Loss Computation in Ferrites\2D\test.edp
+ Load: lg_fem lg_mesh lg_mesh3 eigenvalue
+    1 : load "msh3" (already loaded: msh3)
+    2 : load "Element_P3"(load: loadLibary C:\Program Files (x86)\FreeFem++\\.\Element_P3 = 0) // ou autre selon le besop¶ÓÕin de pr√©cision
+    3 :
+    4 : real Ri = 9.6e-3/2.;
+    5 : real height = 7.6e-3;
+    6 : real w = 5.3e-3;
+    7 : real Rm = Ri + w/2;
+    8 : real Bpeak = 10e-3;
+    9 :
+   10 : real rho = 4.24e-2;
+   11 : real sigma = 1.48e-1;
+   12 : real eps = 2.68e-6;
+   13 : real mu = 2200.0 * 4e-7 * pi;
+   14 :
+   15 : int N = 24;
+ *** Warning  The identifier N hide a Global identifier
+ 
+   16 : real fc0 = 50e3;
+   17 : real fcend = 2e6;
+   18 :
+   19 : real fcmu = 1e6;
+   20 : real tau;
+   21 :
+   22 : ofstream data("data.csv");
+   23 : data << "fc;Ploss" << endl;
+   24 :
+   25 : real u = log(fc0);
+   26 : real uend = log(fcend);
+   27 : real deltau = (uend - u)/N;
+   28 :
+   29 : for (int i = 0; i <= N; ++i) {
+   30 :     real fc = exp(u + i*deltau);
+   31 :     real omega = 2*pi*fc;
+   32 :     tau = 1.0/(2*pi*fcmu);
+   33 :
+   34 :     complex j = 1i;
+   35 :     complex rhoeq = rho + 1. / (sigma + j*omega*eps);
+   36 :     complex mueq = mu * j * omega / (1.0 + tau * j * omega);
+   37 :
+   38 :     // Mesh (2D axisym√©trique RZ)
+   39 :     real rmin = Ri, rmax = Ri + w;
+   40 :     real zmin = 0, zmax = height;
+   41 :     mesh Th = square(50, 50, rmin + (rmax - rmin)*x, zmin + (zmax - zmin)*y) error operator (  <l>, <l>, <d>, <dp¶ÓÕ>
+ List of choices
+         (        <5F_KN_IddddE> :   <3KN_IdE> )
+         (        <N5Fem2D4MeshE> :   <l>, <l>, <7E_Array> )
+         (        <N5Fem2D4MeshE> :   <l>, <l> )
+         (        <St7complexIdE> :   <St7complexIdE> )
+         (        <d> :   <d> )
+         (        <l> :   <l> )
+         (        <5F_KN_ISt7complexIdES1_S1_RKS1_E> :   <3KN_ISt7complexIdEE> )
+ 
+ Error line number 41, in file C:\Users\cyril\Projets\mfem_examples\Loss Computation in Ferrites\2D\test.edp, before  top¶ÓÕken )
+ 
+  current line = 41
+Compile error :
+        line number :41, )
+error Compile error :
+        line number :41, )
+ code = 1 mpirank: 0
+ try getConsole C:\Users\cyril\Projets\mfem_examples\Loss Computation in Ferrites\2D\test.edp
