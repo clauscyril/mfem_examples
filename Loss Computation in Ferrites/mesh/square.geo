@@ -1,7 +1,7 @@
 SetFactory("OpenCASCADE");
 
 // Crée le rectangle : (coin inférieur gauche) + (largeur, hauteur)
-Rectangle(1) = {0, 0, 0, 0.0053, 0.0076, 0}; // Tag 1
+Rectangle(1) = {0.0048, 0, 0, 0.0053 , 0.0076, 0}; // Tag 1
 
 // Attributs physiques des lignes (bords)
 Physical Line("Bas", 1) = {1};    
