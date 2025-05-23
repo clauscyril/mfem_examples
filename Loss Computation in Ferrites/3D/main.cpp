@@ -9,45 +9,101 @@ using namespace mfem;
 void bdr_func(const Vector &x, Vector &H);
 
 // paramètres 
-real_t rho = 1.;
-real_t sigma = 1.;
-real_t eps = 1.;
-real_t mu = 1;
+real_t Ri = 9.6e-3/2.0;
 
-real_t tau = 1;  // Parmaètre déterminé par un fit 
+// // Paramètres Ferrite N30
+// real_t rho = 5.98e-2;
+// real_t sigma = 4.44e-1;
+// real_t eps = 2.48e-6;
+// real_t mu = 4300.0 * 4e-7 * M_PI;
 
-real_t omega = 1.;
+// // Paramètres Ferrite N87
+real_t rho = 4.24e-2;
+real_t sigma = 1.48e-1;
+// real_t eps = 2.68e-6;
+real_t eps = 11.36;
+real_t mu = 2200.0 *4e-7 * M_PI;
+
+
 
 // Dimensions Torre
-real_t h = 1;
-real_t w = 2*M_PI*1000.;
+real_t height = 7.6e-3;
+real_t w = 5.3e-3;
 
-// Paramètre Conditions aux limites
-real_t N = 1;
-real_t I = 1;
-real_t r = 1;
+// // Paramètre Conditions aux limites
+real_t N = 1.;
+real_t I = 10;
 
-
-// Coefficients complexes
-// j imaginaire pur 
-const std::complex<real_t> j(0., 1.);
-
-const std::complex<real_t> rho_eq = rho + (real_t)1. /(sigma + j * omega * eps);  // On est "obliger" de caster 1 en real_t (Au moins metre 1.)
-const std::complex<real_t> mu_eq = j * mu / ((real_t)1. + tau * j * omega);
+real_t Bpeak = 10e-3;
+// real_t mu_g = delta_g * mu;
+real_t Rm = Ri;
 
 
-int main(){
-    const char *path = "../../mesh/torre.msh";
+
+
+
+class PowerLossCoefficient : public mfem::Coefficient
+{
+private:
+    const FiniteElementSpace *fespace;
+    CurlGridFunctionCoefficient J_r;
+    mutable mfem::Vector J_r_vect;
+    CurlGridFunctionCoefficient J_i;
+    mutable mfem::Vector J_i_vect;
+    std::complex<real_t> rho_eq;
+
+public:
+    PowerLossCoefficient(const FiniteElementSpace *fespace_, std::complex<real_t> rho_eq_, CurlGridFunctionCoefficient &J_r_, CurlGridFunctionCoefficient &J_i_)
+    : fespace(fespace_),
+      J_r(J_r_), J_r_vect(fespace_->GetMesh()->SpaceDimension()),
+      J_i(J_i_), J_i_vect(fespace_->GetMesh()->SpaceDimension()),
+      rho_eq(rho_eq_) {}
+    
+    virtual real_t Eval(mfem::ElementTransformation &T, const mfem::IntegrationPoint &ip)
+    {
+        J_r.Eval(J_r_vect, T, ip);
+        J_i.Eval(J_i_vect, T, ip);
+        return  (J_r_vect * J_r_vect + J_i_vect * J_i_vect) *rho_eq.real();
+    }
+
+    
+};
+
+void source(const Vector &x, Vector &H) {
+    real_t r = sqrt(x[0]*x[0] + x[1]*x[1]);
+    real_t Rm = Ri + w/2.;
+    real_t module = N * I / (2 * M_PI * r);
+    H(0) = -x[1]/r * module;
+    H(1) = x[0]/r * module;
+    H(2) = 0.0;
+};
+
+    
+
+real_t ComputePowerLoss(real_t fc, real_t fc_mu){
+
+    real_t omega = 2*M_PI*fc;
+    real_t tau = 1./(2.*M_PI*fc_mu);  // Parmètre déterminé par un fit 
+
+    const std::complex<real_t> j(0., 1.);
+
+    const std::complex<real_t> rho_eq = rho + (real_t)1. /(sigma + j * omega * eps);  // On est "obliger" de caster 1 en real_t (Au moins metre 1.)
+    const std::complex<real_t> mu_eq = mu * j * omega / ((real_t)1. + tau * j * omega);
+    // const std::complex<real_t> mu_eq = mu * j * omega;
+
+    const char *path = "../../mesh/torre_carre.msh";
     Mesh *mesh = new Mesh(path, 1, 1);
     mesh->PrintInfo(std::cout);
 
     int order = 1;
-    int dim = 3;
+    int dim = mesh->Dimension();
 
     FiniteElementCollection *fec = new ND_FECollection(order, dim); 
     FiniteElementSpace *fespace = new FiniteElementSpace(mesh, fec);
 
     ComplexGridFunction h(fespace);
+
+
 
     // Conditions aux limites :
     Array<int> ess_tdof_list;
@@ -60,11 +116,15 @@ int main(){
     Vector zero(dim);
     zero = 0.;
     VectorConstantCoefficient zero_coeff(zero);
+
     h.ProjectBdrCoefficientTangent(bdr_coeff, zero_coeff, dir_bdr);
 
+    // VectorFunctionCoefficient source_coeff(dim, source);
 
     ComplexLinearForm b(fespace, ComplexOperator::HERMITIAN); // Convention du produit hermitien
+    // b.AddDomainIntegrator(new VectorFEDomainLFIntegrator(source_coeff), NULL);
     b.Assemble();
+    // b.Assemble();
 
     // ConstantCoefficient rho_real(sigma/(sigma*sigma + pow(eps*omega, 2))); 
     // ConstantCoefficient rho_imag(-omega/(sigma*sigma + pow(eps*omega, 2))); 
@@ -97,11 +157,13 @@ int main(){
 
     a->FormLinearSystem(ess_tdof_list, h, b, A, H, B);
     
+
+    std::cout << "test" << std::endl;
     // Utilisation du préconditionneur `pc0p` dans le solveur
     pcOp->FormSystemMatrix(ess_tdof_list, Pc);
     GSSmoother M((SparseMatrix&)(*Pc));  
 
-    PCG(*A, M, B, H, 1, 1000, 1e-12, 0.f);
+    PCG(*A, M, B, H, 0, 1000, 1e-12, 0.f);
 
     Array<int> blockOffsets;
     blockOffsets.SetSize(3);
@@ -138,7 +200,7 @@ int main(){
     gmres.SetOperator(*A.Ptr());
     gmres.SetRelTol(1e-12);
     gmres.SetMaxIter(1000);
-    gmres.SetPrintLevel(1);
+    gmres.SetPrintLevel(0);
     gmres.Mult(B, H);
 
     a->RecoverFEMSolution(H,b,h);
@@ -146,31 +208,45 @@ int main(){
     GridFunction h_r = h.real();
     GridFunction h_i = h.imag();
 
-   // Visualisation GLVis
-    char vishost[] = "localhost";
-    int  visport   = 19916;
-    socketstream sol_sock_i(vishost, visport);
-    socketstream sol_sock_grad(vishost, visport);
-    sol_sock_i.precision(8);
-    sol_sock_grad.precision(8);
-    sol_sock_i << "solution\n" << *mesh << h_r
-                << "window_title 'Solution: Real Part'" 
-                << "pause\n" << "keys c\n" << std::flush;
-    sol_sock_grad << "solution\n" << *mesh << h_i
-                << "window_title 'Solution: Imaginary Part'" 
-                << "pause\n" << "keys c\n" << std::flush;
+    CurlGridFunctionCoefficient J_r(&h_r);
+    CurlGridFunctionCoefficient J_i(&h_i);
 
-                
-    ParaViewDataCollection paraview_dc("torre_solution", mesh);
-    paraview_dc.SetPrefixPath("paraview_output"); // Optionnel : dossier de sortie
-    paraview_dc.RegisterField("H_real", &h_r);
-    paraview_dc.RegisterField("H_imag", &h_i);
-    paraview_dc.SetLevelsOfDetail(order);
-    paraview_dc.SetHighOrderOutput(true);
-    paraview_dc.SetCycle(0);
-    paraview_dc.SetTime(0.0);
-    paraview_dc.Save();
 
+
+    std::cout << "test" << std::endl;
+
+    PowerLossCoefficient Power_loss_coef(fespace, rho_eq, J_r, J_i);
+
+    FiniteElementCollection *fec_H1 = new H1_FECollection(order, dim); 
+    FiniteElementSpace *fespace_H1 = new FiniteElementSpace(mesh, fec_H1);
+
+
+    LinearForm lf(fespace_H1);
+    lf.AddDomainIntegrator(new DomainLFIntegrator(Power_loss_coef));
+    lf.Assemble();
+    std::cout << "test2" << std::endl;
+
+    GridFunction ones(fespace_H1);
+    ones = 1;
+    real_t P_loss_tot = lf(ones);
+    real_t P_loss_by_vol_mean = P_loss_tot / (height* (2*M_PI*w) * w);
+
+    std::cout << "Ploss(W/m) : " << P_loss_tot << std::endl;
+    std::cout << "Ploss(W/m^3) : " << P_loss_by_vol_mean << std::endl;
+    return P_loss_by_vol_mean;
+//    // Visualisation GLVis
+//     char vishost[] = "localhost";
+//     int  visport   = 19916;
+//     socketstream sol_sock_i(vishost, visport);
+//     socketstream sol_sock_grad(vishost, visport);
+//     sol_sock_i.precision(8);
+//     sol_sock_grad.precision(8);
+//     sol_sock_i << "solution\n" << *mesh << h_r
+//                 << "window_title 'Solution: Real Part'" 
+//                 << "pause\n" << "keys c\n" << std::flush;
+//     sol_sock_grad << "solution\n" << *mesh << h_i
+//                 << "window_title 'Solution: Imaginary Part'" 
+//                 << "pause\n" << "keys c\n" << std::flush;
 
     return 0;
 }
@@ -179,7 +255,7 @@ void bdr_func(const Vector &x, Vector &H)
 {
     // Cas Torre :
     real_t r = sqrt(x[0]*x[0] + x[1]*x[1]);
-    real_t module = N*I/(2 * M_PI * r);
+    real_t module = sqrt(2)*Bpeak/mu * Rm /(2 * r);;
     H(0) = -x[1]/r * module;
     H(1) = x[0]/r * module;
     H(2) = 0.;
@@ -191,4 +267,37 @@ void bdr_func(const Vector &x, Vector &H)
     // H(0) = 0;
     // H(1) = 0;
     // H(2) = N*I/(2 * M_PI * r);
+}
+
+
+int main() {
+    for (int j = 0; j < 5; j++){
+        std::string name = "./data";
+        name += std::to_string(j) + ".csv";
+        std::cout << name << std::endl;
+        std::ofstream data_file(name);
+        data_file << "fc;Ploss\n";
+        real_t fc_0 = 50e3;
+        real_t fc = fc_0;
+        real_t fc_end = 2e6;
+        int N = 24;
+        real_t fc_mu =  1e6;
+        real_t fc_mu_end = 10e6;
+        real_t delta_fc_mu = (fc_mu_end-fc_mu)/4;
+        fc_mu = 1e6 + j*delta_fc_mu;
+        // real_t delta_f = (fc_end - fc)/N;
+        std::cout << fc_mu << std::endl;
+
+        real_t u = log(fc_0);
+        real_t u_end = log(fc_end);
+        real_t delta_u = (u_end - u)/ N;
+
+        for (int i = 0; i < N + 1; i++) {
+            fc = exp(u + i*delta_u);
+            real_t PLoss = ComputePowerLoss(fc, fc_mu);
+            data_file << fc << ";" << PLoss << std::endl; 
+            
+            
+        }
+    }
 }
