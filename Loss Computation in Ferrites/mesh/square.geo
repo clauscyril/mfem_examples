@@ -9,7 +9,6 @@ Physical Line("Droite", 2) = {2};
 Physical Line("Haut", 3) = {3};     
 Physical Line("Gauche", 4) = {4};   
 
-// Attribut physique de la surface (utile pour marquer le domaine dans MFEM)
 Physical Surface("Domaine", 10) = {1};
 
 // Paramètre de maillage
