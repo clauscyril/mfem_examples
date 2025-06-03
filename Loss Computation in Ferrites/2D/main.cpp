@@ -4,7 +4,9 @@
 
 #include "solver.hpp"
 
+#ifndef M_PI 
 #define M_PI 3.14159265358979323846 
+#endif
 
 using namespace mfem;
 
@@ -18,7 +20,7 @@ int main(){
     // // Path to csv files for saving results
     std::string name = "./datafolder/data_tau_fixed.csv";   // Path to csv file for python plot
     std::ofstream data_file(name);                          // ofstream for writing in the file
-    data_file << "fc;Ploss;flux;Imax\n";                         // Intialising the file with two columns
+    data_file << "fc;Ploss;flux;Imax\n";                    // Intialising the file with coluns names
 
     // Frequency range for the simulation
     real_t fc_0 = 100e3;
@@ -26,7 +28,7 @@ int main(){
     real_t fc_end = 2e6;
     int N = 24; // N+1 points
 
-    // Change of variable to obtain points linearly spaced on a logarithmic scale
+    // Change of variable to obtain points linearly spaced on a log scale (optional)
     real_t u = log(fc_0);
     real_t u_end = log(fc_end);
     real_t delta_u = (u_end - u)/ N; 
@@ -38,7 +40,7 @@ int main(){
         real_t PLoss, flux;                                 // parameters to be computed (will be passed as reference)
         real_t imax = 0;  // If not 0, is used for the boundary conditions, else, the flux is set as the condition by rescaling
 
-        GetPowerLoss(path, fc, fc_mu, PLoss, flux, imax);   // computation of the parameters
+        GetPowerLoss(path, fc, fc_mu, PLoss, flux, imax);   // Calling the functions that computes the power losses
         data_file << fc << ";" << PLoss << ";" << flux << ";" << imax << std::endl; // Writing the results in the csv file
     }
 

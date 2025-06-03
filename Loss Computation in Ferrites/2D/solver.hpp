@@ -6,11 +6,8 @@
 using namespace mfem;
 
 
-// Class Coefficient permettant de determiner un VectorCoefficient prenant les valeurs de rot(H_theta(x,y).e_theta)
-// Cette nouvelle class est nécessaire car elle prend un entré un GridFunction scalair H1 alors que la class CurlGridFunctionCoefficient
-// prend en entré un gridFunction vectoriel 
-
-// Cette class est inspiré de la class GradientGridFunctionCoefficient
+// custom curl of an axisymetric problem, with H = H_theta . e_theta and curl(H) = -dH_theta/dz . e_r + (dH_theta/dr + H_tehta/r) e_z
+// This class is inspired from GradientGridFunctionCoefficient
 class CurlCustomCoefficient : public VectorCoefficient
 {
 protected:
