@@ -52,7 +52,9 @@ real_t bdr_func(const Vector &x);
 real_t inv_r_square_func(const Vector &x);
 
 
+void GetPowerLossByFlux(const char* path, real_t fc, real_t fc_mu, real_t & P_loss_by_vol_mean, std::complex<real_t> &phi);
+
 // Fonction qui calcule la puissance moyenne sur la surface (W/m^3)
-void GetPowerLoss(const char *path, real_t fc, real_t fc_mu, real_t & P_loss_by_vol_mean, real_t &flux);
+void GetPowerLoss(const char *path, real_t fc, real_t fc_mu, real_t & P_loss_by_vol_mean, real_t &flux, real_t &Imax);
 
 #endif // SOLVERS_HPP

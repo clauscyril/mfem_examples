@@ -4,60 +4,111 @@
 
 #include "solver.hpp"
 
-#define M_PI 3.14159265358979323846
+#define M_PI 3.14159265358979323846 
 
 using namespace mfem;
 
-
-
-// L'équation général est la suivante : 
-//  rot(rho_eq rot(H)) + mu_eq jw H = 0
-// Cependant, le problème présente une axisymétrie  => H = H_theta(r,z) . e_theta
-// On peut donc se contenter d'un problème 2D 
-// Malheureusment, lorsque H = H_theta(r,z) . e_theta, on n'a pas l'égalité suivante : 
-// rot(rot H) . e_theta = - div(grad(H_theta)) mais on a rot(rot H) . e_theta = - div(grad(H_theta)) + H_theta/r²
-
-// L'équation a résoudre est donc : 
-//  - div(rho_eq grad(H_theta)) - rho_eq/r² * H_theta + jw mu_eq H_theta = 0
+// Fonction pour lire un fichier CSV et stocker les données dans un vecteur de doubles
+std::vector<std::vector<double>> readCSV(const std::string& filename);
 
 
 int main(){
-    const char *path = "../../mesh/square.msh";
+    const char *path = "../../mesh/square.msh";             // Path to the mesh
+    // ********************************
+    // // Path to csv files for saving results
+    std::string name = "./datafolder/data_tau_fixed.csv";   // Path to csv file for python plot
+    std::ofstream data_file(name);                          // ofstream for writing in the file
+    data_file << "fc;Ploss;flux;Imax\n";                         // Intialising the file with two columns
 
+    // Frequency range for the simulation
+    real_t fc_0 = 100e3;
+    real_t fc = fc_0;
+    real_t fc_end = 2e6;
+    int N = 24; // N+1 points
 
-    for (int j = 0; j < 5; j++){
-        std::string name = "./data";
-        name += std::to_string(j) + ".csv";
-        std::cout << name << std::endl;
-        std::ofstream data_file(name);
-        data_file << "fc;Ploss;flux\n";
+    // Change of variable to obtain points linearly spaced on a logarithmic scale
+    real_t u = log(fc_0);
+    real_t u_end = log(fc_end);
+    real_t delta_u = (u_end - u)/ N; 
 
-        real_t fc_0 = 50e3;
-        real_t fc = fc_0;
-        real_t fc_end = 2e6;
-        int N = 49;
+    real_t fc_mu = 1.8e6;  // cutoff frequency of µeq = µ0 µr / (1 + jw/wc) with wc = 2 pi fc
 
-        real_t fc_mu =  1e6;
-        real_t fc_mu_end = 10e6;
-        real_t delta_fc_mu = (fc_mu_end-fc_mu)/4;
-        fc_mu = fc_mu + j*delta_fc_mu;
-        real_t delta_f = (fc_end - fc)/N;
-        std::cout << fc_mu << std::endl;
+    for (int i = 0; i < N + 1; i++) {    // Looping the differents frequencies
+        fc = exp(u + i*delta_u);                            // Frequency for the simulation (from the change of variable)
+        real_t PLoss, flux;                                 // parameters to be computed (will be passed as reference)
+        real_t imax = 0;  // If not 0, is used for the boundary conditions, else, the flux is set as the condition by rescaling
 
-        real_t u = log(fc_0);
-        real_t u_end = log(fc_end);
-        real_t delta_u = (u_end - u)/ N;
-
-        for (int i = 0; i < N + 1; i++) {
-            fc = exp(u + i*delta_u);
-            real_t PLoss, flux;
-            GetPowerLoss(path, fc, fc_mu, PLoss, flux);
-            data_file << fc << ";" << PLoss << ";" << flux <<std::endl; 
-        }
+        GetPowerLoss(path, fc, fc_mu, PLoss, flux, imax);   // computation of the parameters
+        data_file << fc << ";" << PLoss << ";" << flux << ";" << imax << std::endl; // Writing the results in the csv file
     }
 
-    // GetPowerLoss(path, 1e6, 5e6);
-    // GetPowerLoss(path, 50e3, 5e6);
-    return 0;
+
+
+
+    // *****************************************
+
+    // std::vector<std::vector<real_t>> f = readCSV("f.csv");
+    // std::vector<std::vector<real_t>> I = readCSV("I.csv");
+    // std::string name = "./data";
+    // name += std::to_string(0) + ".csv";
+    
+    // // ofstream to those files
+    // std::ofstream data_file(name);
+    // data_file << "fc;Ploss;flux\n";
+
+    // for (int i = 0; i<f.size(); i++) {
+    //     std::cout << "f = " << f[i][0] << ", I = " << I[i][0] << std::endl;
+    //     real_t fc = f[i][0] * 1000;
+    //     real_t Imax = I[i][0];
+    //     real_t fc_mu = 1e6;
+
+    //     real_t PLoss, flux;
+
+    //     GetPowerLoss(path, fc, fc_mu, PLoss, flux, Imax);
+    //     data_file << fc << ";" << PLoss << ";" << flux <<std::endl; 
+    // }
+
+
+    // *****************************************
+
+
+    // real_t PLoss;
+    // std::complex<real_t> phi(1,1);
+    
+    // // GetPowerLossByFlux(path, 0.5e6, 3e6, PLoss, phi);
+    // // std::cout << PLoss << std::endl;
+    // real_t flux = 0;
+    // real_t imax = 0;
+    // GetPowerLoss(path, 500e3, 1.8e6, PLoss, flux, imax);
+
+return 0;
 }
 
+
+
+std::vector<std::vector<double>> readCSV(const std::string& filename) {
+    std::vector<std::vector<double>> data;
+    std::ifstream file(filename);
+
+    if (!file.is_open()) {
+        std::cerr << "Erreur: Impossible d'ouvrir le fichier " << filename << std::endl;
+        return data;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::vector<double> row;
+        std::stringstream lineStream(line);
+        std::string cell;
+
+        while (std::getline(lineStream, cell, ',')) {
+            // Convertir la cellule en double et l'ajouter à la ligne
+            row.push_back(std::stod(cell));
+        }
+
+        data.push_back(row);
+    }
+
+    file.close();
+    return data;
+}

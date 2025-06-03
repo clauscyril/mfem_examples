@@ -1,0 +1,17 @@
+cmake_minimum_required(VERSION 3.10)
+
+project(MFEMExample)
+
+set(CMAKE_CXX_STANDARD 11)
+
+find_package(MFEM REQUIRED)
+
+
+add_executable(main main.cpp solver.cpp)
+add_executable(multiple_tau multiple_tau.cpp solver.cpp)
+
+target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(main mfem) 
+
+target_include_directories(multiple_tau PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(multiple_tau mfem)

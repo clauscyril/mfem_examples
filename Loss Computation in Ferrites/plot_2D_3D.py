@@ -3,13 +3,15 @@ import pandas as pd
 import os
 
 path = os.path.dirname(os.path.abspath(__file__))
-path_file0_2D = os.path.join(path,"2D", "build", "data0.csv")
-path_file1_2D = os.path.join(path,"2D","build", "data1.csv")
-path_file2_2D = os.path.join(path,"2D","build", "data2.csv")
-path_file3_2D = os.path.join(path,"2D","build", "data3.csv")
-path_file4_2D = os.path.join(path,"2D","build", "data4.csv")
+path_file_2D = os.path.join(path,"2D", "build","datafolder", "data_tau_fixed.csv")
+path_file0_2D = os.path.join(path,"2D", "build","datafolder", "data0.csv")
+path_file1_2D = os.path.join(path,"2D","build","datafolder", "data1.csv")
+path_file2_2D = os.path.join(path,"2D","build","datafolder", "data2.csv")
+path_file3_2D = os.path.join(path,"2D","build","datafolder", "data3.csv")
+path_file4_2D = os.path.join(path,"2D","build","datafolder", "data4.csv")
 
 
+data_2D = pd.read_csv(path_file_2D, sep=";")
 data0_2D = pd.read_csv(path_file0_2D, sep=";")
 data1_2D = pd.read_csv(path_file1_2D, sep=";")
 data2_2D= pd.read_csv(path_file2_2D, sep=";")
@@ -17,8 +19,12 @@ data3_2D = pd.read_csv(path_file3_2D, sep=";")
 data4_2D = pd.read_csv(path_file4_2D, sep=";")
 
 
-Fc_2D = data0_2D['fc']/1000
-Ploss_2D = data0_2D['Ploss']/1000
+Fc_2D = data_2D['fc']/1000
+Ploss_2D = data_2D['Ploss']/1000
+
+
+Fc0_2D = data0_2D['fc']/1000
+Ploss0_2D = data0_2D['Ploss']/1000
 
 Fc1_2D = data1_2D['fc']/1000
 Ploss1_2D = data1_2D['Ploss']/1000
@@ -73,8 +79,8 @@ plt.figure()
 # plt.plot(Fc4_2D, Ploss4_2D, '--*', label="Tau 4")
 
 
-plt.plot(Fc4_2D, Ploss4_2D, '--*', label="fc_mu = 10e6 2D")
-plt.plot(Fc4_3D, Ploss4_3D, '--*', label="fc_mu = 10e6 3D")
+plt.plot(Fc_2D, Ploss_2D, '--*', label="fc_mu = 1.8 Mhz 2D")
+plt.plot(Fc_3D, Ploss_3D, '--*', label="fc_mu = 1.8 Mhz 3D")
 
 # Définition de l'échelle logarithmique pour l'axe y
 plt.xscale('log')

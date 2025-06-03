@@ -6,7 +6,7 @@ using namespace mfem;
 
 int main() {
 
-    const char *path = "meshs/hand_all.msh";
+    const char *path = "meshs/bones.msh";
     Mesh mesh(path, 1, 1);
     
     mesh.PrintInfo(cout);
