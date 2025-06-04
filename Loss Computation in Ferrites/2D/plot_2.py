@@ -13,14 +13,18 @@ data_sim = pd.read_csv(data_sim_path, sep=";")
 
 f = data["f"]
 P_eddy = data["p_eddy"]
+P_exi = data["p_exi"]
 
 f_mfem = data_sim["fc"]
-P_eddy_mfem = data_sim['Ploss']
+P_eddy_mfem = data_sim['P_eddy']/2
+P_exi_mfem = data_sim["P_mag"]/2
 
 plt.figure()
 plt.plot(f,P_eddy/1000,label="Peddy FreeFem")
-plt.plot(f_mfem, P_eddy_mfem/2000, label="Peddy mfem")
-# plt.loglog()
+plt.plot(f_mfem, P_eddy_mfem/1000, label="Peddy mfem")
+plt.plot(f,P_exi/1000,label="Pexi FreeFem")
+plt.plot(f_mfem, P_exi_mfem/1000, label="Pexi mfem")
+plt.loglog()
 plt.semilogx()
 plt.grid()
 plt.legend()

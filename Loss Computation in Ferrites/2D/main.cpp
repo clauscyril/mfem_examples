@@ -20,7 +20,7 @@ int main(){
     // // Path to csv files for saving results
     std::string name = "./datafolder/data_tau_fixed.csv";   // Path to csv file for python plot
     std::ofstream data_file(name);                          // ofstream for writing in the file
-    data_file << "fc;Ploss;flux;Imax\n";                    // Intialising the file with coluns names
+    data_file << "fc;P_eddy;P_mag;P_tot;flux;Imax\n";                    // Intialising the file with coluns names
 
     // Frequency range for the simulation
     real_t fc_0 = 100e3;
@@ -37,11 +37,11 @@ int main(){
 
     for (int i = 0; i < N + 1; i++) {    // Looping the differents frequencies
         fc = exp(u + i*delta_u);                            // Frequency for the simulation (from the change of variable)
-        real_t PLoss, flux;                                 // parameters to be computed (will be passed as reference)
+        real_t PLoss_eddy, PLoss_mag, flux;                                 // parameters to be computed (will be passed as reference)
         real_t imax = 0;  // If not 0, is used for the boundary conditions, else, the flux is set as the condition by rescaling
 
-        GetPowerLoss(path, fc, fc_mu, PLoss, flux, imax);   // Calling the functions that computes the power losses
-        data_file << fc << ";" << PLoss << ";" << flux << ";" << imax << std::endl; // Writing the results in the csv file
+        GetPowerLoss(path, fc, fc_mu, PLoss_eddy, PLoss_mag, flux, imax);   // Calling the functions that computes the power losses
+        data_file << fc << ";" << PLoss_eddy << ";" << PLoss_mag << ";" << PLoss_eddy + PLoss_mag << ";" << flux << ";" << imax << std::endl; // Writing the results in the csv file
     }
 
 
@@ -75,13 +75,11 @@ int main(){
 
 
     // real_t PLoss;
-    // std::complex<real_t> phi(1,1);
+    // // std::complex<real_t> phi(1,1);
     
-    // // GetPowerLossByFlux(path, 0.5e6, 3e6, PLoss, phi);
-    // // std::cout << PLoss << std::endl;
     // real_t flux = 0;
     // real_t imax = 0;
-    // GetPowerLoss(path, 500e3, 1.8e6, PLoss, flux, imax);
+    // GetPowerLoss(path, 100e3, 1.8e6, PLoss, flux, imax);
 
 return 0;
 }

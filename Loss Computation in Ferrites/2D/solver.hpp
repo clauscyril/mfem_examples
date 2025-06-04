@@ -40,10 +40,27 @@ public:
     virtual real_t Eval(mfem::ElementTransformation &T, const mfem::IntegrationPoint &ip) override;
 };
 
+// Class personnalisée permettant de calculer la densité de puissance Re(E.J*) = Re(rho) (||Jr||² + ||Ji||²) 
+class PowerLossMagCoefficient : public mfem::Coefficient
+{
+private:
+    const FiniteElementSpace *fespace;
+    GridFunctionCoefficient H_r;
+    GridFunctionCoefficient H_i;
+    std::complex<real_t> mu_eq;
+    real_t omega;
+
+public:
+    PowerLossMagCoefficient(const FiniteElementSpace *fespace_, std::complex<real_t> mu_eq_, real_t omega_, GridFunctionCoefficient &H_r_, GridFunctionCoefficient &H_i_);
+    virtual real_t Eval(mfem::ElementTransformation &T, const mfem::IntegrationPoint &ip) override;
+};
 
 
 // Fonction qui permet d'imposer les conditions aux limites
 real_t bdr_func(const Vector &x);
+
+// Function used for adding the r factor in the integral as we are in cylindrical coordinates
+real_t r_coeff_func(const Vector &x);
 
 // Fonction qui permet d'ajouter le terme de compensation en passant en 2D (Passage de rot(rot) à div(grad) + 1/r²)
 real_t inv_r_square_func(const Vector &x);
@@ -52,6 +69,6 @@ real_t inv_r_square_func(const Vector &x);
 void GetPowerLossByFlux(const char* path, real_t fc, real_t fc_mu, real_t & P_loss_by_vol_mean, std::complex<real_t> &phi);
 
 // Fonction qui calcule la puissance moyenne sur la surface (W/m^3)
-void GetPowerLoss(const char *path, real_t fc, real_t fc_mu, real_t & P_loss_by_vol_mean, real_t &flux, real_t &Imax);
+void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy, real_t &P_loss_mag, real_t &flux, real_t &Imax);
 
 #endif // SOLVERS_HPP

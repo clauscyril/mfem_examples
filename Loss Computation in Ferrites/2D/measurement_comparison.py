@@ -23,12 +23,28 @@ path_file = os.path.join(path,"build","datafolder", "data_tau_fixed.csv")
 data0 = pd.read_csv(path_file, sep=";")
 
 F = data0['fc']/1000
-Ploss = data0['Ploss']/1000
+P_eddy= data0['P_eddy']/2000
+P_mag = data0["P_mag"]/2000
+P_tot = data0["P_tot"]/2000
+# P_tot = P_eddy/2 + P_mag/2
 flux = data0['flux']
 
 plt.figure()
 plt.plot(f1, Losses1,'-o', label="Measurements")
-plt.plot(F, Ploss,'-o', label="MFEM 2D")
+plt.plot(F, P_tot,'-o', label="MFEM total losses 2D")
+plt.plot(F, P_eddy,'--', label="MFEM Eddy")
+plt.plot(F, P_mag,'--', label="MFEM mag")
+plt.legend()
+plt.xscale('log')
+plt.xlabel('Frequency (kHz)')
+plt.ylabel('Losses (kW/m^3)')
+plt.grid()
+
+plt.figure()
+plt.plot(f1, Losses1,'-o', label="Measurements")
+plt.plot(F, P_tot,'-o', label="MFEM total losses 2D")
+plt.plot(F, P_eddy,'--', label="MFEM Eddy")
+plt.plot(F, P_mag,'--', label="MFEM mag")
 plt.legend()
 plt.xscale('log')
 plt.yscale('log')
