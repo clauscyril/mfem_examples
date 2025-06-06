@@ -8,7 +8,7 @@ import pandas as pd
 path = os.path.dirname(os.path.abspath(__file__))
 
 # Measurements from mat file
-mat_data = scipy.io.loadmat(os.path.join(path,'../measurements', 'meas_N30_jan_2025.mat'))
+mat_data = scipy.io.loadmat(os.path.join(path,'../../measurements', 'meas_N30_jan_2025.mat'))
 struct = mat_data['meas']
 data = struct['data'][0, 0]
 f = data['f']
@@ -19,7 +19,9 @@ I1 = np.array([e[0] for e in I[0,0]])
 Losses1 = np.array([e[0] for e in Losses[0,0]])/1000
 
 # Simulation results
+print(path)
 path_file = os.path.join(path,"build","datafolder", "data_tau_fixed.csv")
+print(path_file)
 data0 = pd.read_csv(path_file, sep=";")
 
 F = data0['fc']/1000

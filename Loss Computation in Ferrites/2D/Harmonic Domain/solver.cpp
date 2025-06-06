@@ -268,7 +268,7 @@ void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy
     pc_r = new GSSmoother(*PCOp.As<SparseMatrix>());
 
     // // Si on utilise les calculs parallèles (ParMesh, etc...), on peut utiliser celui-ci :
-    // HypreBoomerAMG *amg = new HypreBoomerAMG();
+    // HypreBoomer   AMG *amg = new HypreBoomerAMG();
     // amg->SetOperator(*PCOp.As<HypreParMatrix>());
     // pc_r = amg;
 
@@ -287,6 +287,11 @@ void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy
     gmres.SetMaxIter(100000);
     gmres.SetPrintLevel(0);
     gmres.Mult(B, H);
+
+    
+    // UMFPackSolver solver;
+    // solver.SetOperator(*A.Ptr());
+    // solver.Mult(B, H);
 
     a->RecoverFEMSolution(H,b,h);  // Get system solution in h GridFunction
    
@@ -410,7 +415,7 @@ void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy
 
 
 
-    bool visualisation = 0;  // 1 : plots activés
+    bool visualisation = 1;  // 1 : plots activés
                              // 0 : plots desactivés
     h_r *= sqrt(2);
     h_i *= sqrt(2);

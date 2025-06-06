@@ -37,9 +37,9 @@ int main(){
 
         for (int i = 0; i < N + 1; i++) {
             fc = exp(u + i*delta_u);                            // Frequency for the simulation
-            real_t PLoss, flux;  
+            real_t PLoss, P_mag, flux;  
             real_t imax = 0;                               // parameters computed
-            GetPowerLoss(path, fc, fc_mu, PLoss, flux, imax);         // computation of the parameters
+            GetPowerLoss(path, fc, fc_mu, PLoss, P_mag, flux, imax);         // computation of the parameters
             data_file << fc << ";" << PLoss << ";" << flux <<std::endl; 
         }
     }

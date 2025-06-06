@@ -16,33 +16,33 @@ std::vector<std::vector<double>> readCSV(const std::string& filename);
 
 int main(){
     const char *path = "../../mesh/square.msh";             // Path to the mesh
-    // ********************************
-    // // Path to csv files for saving results
-    std::string name = "./datafolder/data_tau_fixed.csv";   // Path to csv file for python plot
-    std::ofstream data_file(name);                          // ofstream for writing in the file
-    data_file << "fc;P_eddy;P_mag;P_tot;flux;Imax\n";                    // Intialising the file with coluns names
+    // // ********************************
+    // // // Path to csv files for saving results
+    // std::string name = "./datafolder/data_tau_fixed.csv";   // Path to csv file for python plot
+    // std::ofstream data_file(name);                          // ofstream for writing in the file
+    // data_file << "fc;P_eddy;P_mag;P_tot;flux;Imax\n";                    // Intialising the file with coluns names
 
-    // Frequency range for the simulation
-    real_t fc_0 = 100e3;
-    real_t fc = fc_0;
-    real_t fc_end = 2e6;
-    int N = 24; // N+1 points
+    // // Frequency range for the simulation
+    // real_t fc_0 = 100e3;
+    // real_t fc = fc_0;
+    // real_t fc_end = 2e6;
+    // int N = 24; // N+1 points
 
-    // Change of variable to obtain points linearly spaced on a log scale (optional)
-    real_t u = log(fc_0);
-    real_t u_end = log(fc_end);
-    real_t delta_u = (u_end - u)/ N; 
+    // // Change of variable to obtain points linearly spaced on a log scale (optional)
+    // real_t u = log(fc_0);
+    // real_t u_end = log(fc_end);
+    // real_t delta_u = (u_end - u)/ N; 
 
-    real_t fc_mu = 1.8e6;  // cutoff frequency of µeq = µ0 µr / (1 + jw/wc) with wc = 2 pi fc
+    // real_t fc_mu = 1.8e6;  // cutoff frequency of µeq = µ0 µr / (1 + jw/wc) with wc = 2 pi fc
 
-    for (int i = 0; i < N + 1; i++) {    // Looping the differents frequencies
-        fc = exp(u + i*delta_u);                            // Frequency for the simulation (from the change of variable)
-        real_t PLoss_eddy, PLoss_mag, flux;                                 // parameters to be computed (will be passed as reference)
-        real_t imax = 0;  // If not 0, is used for the boundary conditions, else, the flux is set as the condition by rescaling
+    // for (int i = 0; i < N + 1; i++) {    // Looping the differents frequencies
+    //     fc = exp(u + i*delta_u);                            // Frequency for the simulation (from the change of variable)
+    //     real_t PLoss_eddy, PLoss_mag, flux;                                 // parameters to be computed (will be passed as reference)
+    //     real_t imax = 0;  // If not 0, is used for the boundary conditions, else, the flux is set as the condition by rescaling
 
-        GetPowerLoss(path, fc, fc_mu, PLoss_eddy, PLoss_mag, flux, imax);   // Calling the functions that computes the power losses
-        data_file << fc << ";" << PLoss_eddy << ";" << PLoss_mag << ";" << PLoss_eddy + PLoss_mag << ";" << flux << ";" << imax << std::endl; // Writing the results in the csv file
-    }
+    //     GetPowerLoss(path, fc, fc_mu, PLoss_eddy, PLoss_mag, flux, imax);   // Calling the functions that computes the power losses
+    //     data_file << fc << ";" << PLoss_eddy << ";" << PLoss_mag << ";" << PLoss_eddy + PLoss_mag << ";" << flux << ";" << imax << std::endl; // Writing the results in the csv file
+    // }
 
 
 
@@ -74,12 +74,12 @@ int main(){
     // *****************************************
 
 
-    // real_t PLoss;
-    // // std::complex<real_t> phi(1,1);
+    real_t P_eddy, P_mag;
+    // std::complex<real_t> phi(1,1);
     
-    // real_t flux = 0;
-    // real_t imax = 0;
-    // GetPowerLoss(path, 100e3, 1.8e6, PLoss, flux, imax);
+    real_t flux = 0;
+    real_t imax = 0;
+    GetPowerLoss(path, 100e3, 1.8e6, P_eddy, P_mag, flux, imax);
 
 return 0;
 }
