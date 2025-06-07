@@ -10,8 +10,8 @@
 using namespace mfem;
 
 // NI parameters
-real_t I_max = 0.08;
-real_t f = 1000e3;
+real_t I_max = 0.241002/sqrt(2);
+real_t f = 1800e3;
 
 
 // geometric parameters
@@ -31,9 +31,9 @@ real_t mu = 4300.0 * 4e-7 * M_PI;
 
 real_t tau = 1/(2 * M_PI * 1.8e6);
 
-int num_steps = 100000;
+int num_steps = 1000;
 real_t t = 0.0;
-real_t Ts = 1./f/1000;
+real_t Ts = 1./f/100;
 
 
 
@@ -46,6 +46,7 @@ real_t A3 = -(Ts*sigma -2*eps) / (2*eps + Ts*sigma);
 real_t B1 = 2*mu / (Ts + 2*tau);
 real_t B2 = -(2*mu) / (Ts + 2*tau);
 real_t B3 = -(Ts - 2*tau) / (Ts + 2*tau);
+
 real_t C1 = Ts*mu/(Ts+2*tau);
 real_t C2 = Ts*mu/(Ts+2*tau);
 real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
@@ -78,6 +79,21 @@ public:
 };
 
 
+// Class personnalisée permettant de calculer la densité de puissance Re(E.J*) = Re(rho) (||Jr||² + ||Ji||²) 
+class PowerLossCoefficient : public mfem::Coefficient
+{
+private:
+    const FiniteElementSpace *fespace;
+    CurlCustomCoefficient J;
+    mutable mfem::Vector J_vect;
+    VectorGridFunctionCoefficient E;
+    mutable mfem::Vector E_vect;
+
+public:
+    PowerLossCoefficient(const FiniteElementSpace *fespace_, CurlCustomCoefficient &J_, VectorGridFunctionCoefficient &E_);
+    virtual real_t Eval(mfem::ElementTransformation &T, const mfem::IntegrationPoint &ip) override;
+};
+
 
 
 int main(){
@@ -106,8 +122,11 @@ int main(){
     GridFunction Jnm1(fespace_E);
     // CurlCustomCoefficient *curl_H_coeff = new CurlCustomCoefficient(&Hn);
 
+    GridFunction Pn(fespace);
+
     En = 0;
     Jn = 0;
+    Jnm1 = 0;
     Enm1 = 0;
     Enm1 = 0;
 
@@ -191,38 +210,39 @@ int main(){
 
 
     socketstream sout;
-    // socketstream sout_e;
+    socketstream sout_e;
     socketstream sout_j;
+    socketstream sout_p;
+    
     char vishost[] = "localhost";
     int visport = 19916;
     sout.open(vishost, visport);
-    // sout_e.open(vishost, visport);
+    sout_e.open(vishost, visport);
     sout_j.open(vishost, visport);
+    sout_p.open(vishost, visport);
 
     sout.precision(8);
     sout << "solution\n" << *mesh << Hn << "\nkeys j\n" << std::flush;
-    // sout_e.precision(8);
-    // sout_e << "solution\n" << *mesh << En << "\nkeys j\n" << std::flush;
+    sout_e.precision(8);
+    sout_e << "solution\n" << *mesh << En << "\nkeys j\n" << std::flush;
     sout_j.precision(8);
     sout_j << "solution\n" << *mesh << Jn << "\nkeys j\n" << std::flush;
+    sout_p.precision(8);
+    sout_p << "solution\n" << *mesh << Pn << "\nkeys j\n" << std::flush;
+
+    std::string name = "./power_1800.csv";   // Path to csv file for python plot
+    std::ofstream data_file(name);                          // ofstream for writing in the file
+    data_file << "t;p_eddy\n0;0\n";                    // Intialising the file with coluns names
 
 
-    int vis_steps = 10;
+
+    int vis_steps = 100;
+    // ***************  Time iterations *****************
     for (int step = 0; step < num_steps; step++)
     {
         t += Ts;
-        // std::cout << "H(0) = " << Hn(0) <<  std::endl;
-        // std::cout << "t = " << t << std::endl;
-        std::cout << "NI/(2*pi*Ri) = " << I_max * sqrt(2)*sin(2*M_PI*f * t) /(2*M_PI*Ri) << std::endl;
-        std::cout << "A3 = " << A3 << std::endl;
-        std::cout << "A1 = " << A1 << std::endl;
-        std::cout << "A2 = " << A2 << std::endl;
-        std::cout << "B3 = " << B3 << std::endl;
-        std::cout << "B1 = " << B1 << std::endl;
-        std::cout << "B2 = " << B2 << std::endl;
-
-        bdr_coeff.SetTime(t);
-        Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr);
+        bdr_coeff.SetTime(t);       // Update boundary conditions fonction's time parameters
+        Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr); // Set new boundary conditions on H
 
         // Mult M * dBdt → MdBdt
         m.Mult(db_dt, MdBdt);
@@ -261,7 +281,7 @@ int main(){
         db_dt += db_dtm1;
 
         // Hn /= B1;
-        db_dtm1 /= B3;
+        // db_dtm1 /= B3;
 
         Hnm1 = Hn;
         db_dtm1 = db_dt;
@@ -270,26 +290,38 @@ int main(){
         CurlCustomCoefficient J_coeff(&Hn);
         Jn.ProjectCoefficient(J_coeff);
 
-        // Enm1 *= A4;
-        // Jnm1 *= A2;
-        // Jn *= A1;
+        GridFunction Jn_temp(fespace_E);
+        Jn_temp = Jn;
+        Jn_temp *=A1;
+        Jnm1 *= A2;
+        Enm1 *= A3;
+        En = 0;
+        En+=Jn_temp;
+        En+=Jnm1;
+        En+=Enm1;
 
-        // En += Jn;
-        // En += Jnm1;
-        // En -= Enm1;
+        Enm1 = En;
+        Jnm1 = Jn;
 
-        // En *= 1./A3;
-        // Jn *= 1./A1;
+        VectorGridFunctionCoefficient E_coeff(&En);
+        PowerLossCoefficient P_eddy_coeff(fespace_E, J_coeff, E_coeff);
+        GridFunction one(fespace);
+        one = 1;
+        LinearForm lf(fespace);
+        lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
+        lf.Assemble();
+        real_t P_eddy_tot = 2*M_PI*lf(one);
+        real_t vol = M_PI * height * (Rout*Rout - Ri*Ri);
+        real_t P_eddy = P_eddy_tot/vol;
 
-        // Enm1 = En;
-        // Jnm1 = Jn;
+        Pn.ProjectCoefficient(P_eddy_coeff);
 
-        bool visualization = true;
 
-        
+        data_file << t << ";" << P_eddy << std::endl;
 
+        bool visualization = false;
         // Visualisation avec GLVis
-        if (step % vis_steps == 0)
+        if (step % vis_steps == 0 )
         {
             std::cout << "Time step: " << step << ", Time: " << t << std::endl;
 
@@ -300,13 +332,16 @@ int main(){
                      << *mesh << Hn
                      << "window_title 'Champ H'"
                      << std::flush;
-                // sout_e << "solution\n" << *mesh << En <<  "window_title 'Champ E'" << std::flush;
+                sout_e << "solution\n" << *mesh << En <<  "window_title 'Champ E'" << std::flush;
                 sout_j << "solution\n" << *mesh << Jn <<  "window_title 'Courant J'" << std::flush;
+                sout_p << "solution\n" << *mesh << Pn <<  "window_title 'Puissance P'" << std::flush;
+
                 // std::cin.get(); // Décommenter pour pause manuelle
             }
         }
         
     }
+    data_file.close();
 
 }
 
@@ -359,3 +394,18 @@ void CurlCustomCoefficient::Eval(Vector &V, ElementTransformation &T,
     V[1] = grad_H[0] + H_val /(x[0]);   // dH/dr + H/r
 
 } 
+
+PowerLossCoefficient::PowerLossCoefficient(const FiniteElementSpace *fespace_, CurlCustomCoefficient &J_, VectorGridFunctionCoefficient &E_)
+    : fespace(fespace_),
+      J(J_), J_vect(fespace_->GetMesh()->SpaceDimension()),
+      E(E_), E_vect(fespace_->GetMesh()->SpaceDimension()) {}
+
+real_t PowerLossCoefficient::Eval(ElementTransformation &T,
+                                    const IntegrationPoint &ip)
+{
+    Vector x;               // Vector coordinates
+    T.Transform(ip, x);     // Get the global coordinates in vector x from integration point's coordinates in the element referential
+    J.Eval(J_vect, T, ip);    // Get from J_r (Coefficient) the value at the point ip in J_r_vect
+    E.Eval(E_vect, T, ip);    // same
+    return  (J_vect*E_vect) * x[0];  // Re(rho) * J² * r (Cylindrical coordinates)
+}

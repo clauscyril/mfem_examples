@@ -79,7 +79,7 @@ int main(){
     
     real_t flux = 0;
     real_t imax = 0;
-    GetPowerLoss(path, 100e3, 1.8e6, P_eddy, P_mag, flux, imax);
+    GetPowerLoss(path, 1800e3, 1.8e6, P_eddy, P_mag, flux, imax);
 
 return 0;
 }
