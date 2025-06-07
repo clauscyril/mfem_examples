@@ -25,10 +25,9 @@ print(path_file)
 data0 = pd.read_csv(path_file, sep=";")
 
 F = data0['fc']/1000
-P_eddy= data0['P_eddy']/2000
-P_mag = data0["P_mag"]/2000
-P_tot = data0["P_tot"]/2000
-# P_tot = P_eddy/2 + P_mag/2
+P_eddy= data0['P_eddy']/1000
+P_mag = data0["P_mag"]/1000
+P_tot = data0["P_tot"]/1000
 flux = data0['flux']
 
 plt.figure()

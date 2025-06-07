@@ -119,7 +119,7 @@ real_t inv_r_square_func(const Vector &x){
 
 
 // Function for computing the power loss (by eddy currents)
-void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy, real_t &P_loss_mag, real_t &flux, real_t &Imax) {
+void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy, real_t &P_loss_mag, real_t &flux_abs, real_t &Imax) {
     
     real_t omega = 2*M_PI*fc;           // Working frequency
     real_t tau = 1./(2.*M_PI*fc_mu);    // cutoff frequency of µ_eq = µ0µr/(1 + tau*j*w) model
@@ -307,36 +307,43 @@ void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy
     GridFunction B_i(fespace);
 
     // Computing B with B = µH
-    B_r = h_r;
-    B_r *= mu_eq.real();
+    // B_r = h_r;
+    // B_r *= mu_eq.real();
 
-    B_i = h_i;
-    B_i *= mu_eq.imag();
+    // B_i = h_i;
+    // B_i *= mu_eq.imag();
 
-    // Coefficients for computing the integral of B (magnetic flux)
-    GridFunctionCoefficient B_r_coeff(&B_r);
-    GridFunctionCoefficient B_i_coeff(&B_i);
+    // // Coefficients for computing the integral of B (magnetic flux)
+    // GridFunctionCoefficient B_r_coeff(&B_r);
+    // GridFunctionCoefficient B_i_coeff(&B_i);
+
+        // Coefficients for computing the integral of B (magnetic flux)
+    GridFunctionCoefficient H_r_coeff(&h_r);
+    GridFunctionCoefficient H_i_coeff(&h_i);
 
     // LinearForm representing the integral of B
     LinearForm lf_r_flux(fespace);
-    lf_r_flux.AddDomainIntegrator(new DomainLFIntegrator(B_r_coeff));
+    lf_r_flux.AddDomainIntegrator(new DomainLFIntegrator(H_r_coeff));
     lf_r_flux.Assemble();
     real_t flux_r = lf_r_flux(ones);
 
     // The same for the imaginary part
     LinearForm lf_i_flux(fespace);
-    lf_i_flux.AddDomainIntegrator(new DomainLFIntegrator(B_i_coeff));
+    lf_i_flux.AddDomainIntegrator(new DomainLFIntegrator(H_i_coeff));
     lf_i_flux.Assemble();
     real_t flux_i = lf_i_flux(ones);
 
+    std::complex<real_t> flux(flux_r, flux_i);
+    flux *= mu_eq;
+    flux_abs = std::abs(flux);
+
     // Computing the corrective term to have the desired magnetic flux
     real_t B_rms;
-    flux = sqrt(flux_r * flux_r + flux_i * flux_i); //  |flux|
-    B_rms = flux / w / height;
+    B_rms = flux_abs / w / height;
     std::cout << "Brms pre-processing = " << B_rms << ", B_peak pre-processing = " << B_rms*sqrt(2) << std::endl;
     // Printing the magnetic flux
     std::cout << "Flux magnétique = " << flux_r << " + " << flux_i << "j" << std::endl;
-    std::cout << "Flux magnétique (module) = " << flux << std::endl;
+    std::cout << "Flux magnétique (module) = " << flux_abs << std::endl;
 
     real_t coeff_correction;
     if (Imax == 0.)  // Imax = 0 si on impose avec Bpeak
@@ -401,8 +408,8 @@ void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy
     std::cout << "Ploss(W/m^3) : " << P_loss_eddy << std::endl;
 
     // ************* Mag losses *****************
-    GridFunctionCoefficient H_r_coeff(&h_r);
-    GridFunctionCoefficient H_i_coeff(&h_i);
+    // GridFunctionCoefficient H_r_coeff(&h_r);
+    // GridFunctionCoefficient H_i_coeff(&h_i);
 
     PowerLossMagCoefficient Power_loss_mag_coeff(fespace_E, mu_eq, omega, H_r_coeff, H_i_coeff);
 
@@ -415,7 +422,7 @@ void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy
 
 
 
-    bool visualisation = 1;  // 1 : plots activés
+    bool visualisation = 0;  // 1 : plots activés
                              // 0 : plots desactivés
     h_r *= sqrt(2);
     h_i *= sqrt(2);

@@ -16,8 +16,8 @@ P_eddy = data["p_eddy"]
 P_exi = data["p_exi"]
 
 f_mfem = data_sim["fc"]
-P_eddy_mfem = data_sim['P_eddy']/2
-P_exi_mfem = data_sim["P_mag"]/2
+P_eddy_mfem = data_sim['P_eddy']
+P_exi_mfem = data_sim["P_mag"]
 
 plt.figure()
 plt.plot(f,P_eddy/1000,label="Peddy FreeFem")
