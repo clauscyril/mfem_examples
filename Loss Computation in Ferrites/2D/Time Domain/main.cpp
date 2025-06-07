@@ -10,8 +10,8 @@
 using namespace mfem;
 
 // NI parameters
-real_t I_max = 0.241002/sqrt(2);
-real_t f = 1800e3;
+real_t I_rms = 0.188181/sqrt(2);
+real_t f = 2000e3;
 
 
 // geometric parameters
@@ -100,7 +100,7 @@ int main(){
     const char *path = "../../../mesh/square.msh";             // Path to the mesh
 
     Mesh *mesh = new Mesh(path, 1, 1);
-    mesh->UniformRefinement();
+    // mesh->UniformRefinement();
 
     int order = 2;                      // elements order : 2
     int dim = mesh->Dimension();        // Mesh dimension : 2
@@ -115,6 +115,9 @@ int main(){
     GridFunction db_dt(fespace);
     GridFunction db_dtm1(fespace);
 
+    GridFunction Bn(fespace);
+    GridFunction Bnm1(fespace);
+
     GridFunction En(fespace_E);
     GridFunction Enm1(fespace_E);
 
@@ -124,13 +127,16 @@ int main(){
 
     GridFunction Pn(fespace);
 
+    // Initializing all values to 0
+    Bn = 0;
+    Bnm1 = 0;
     En = 0;
     Jn = 0;
     Jnm1 = 0;
     Enm1 = 0;
     Enm1 = 0;
 
-    Hnm1 = 0;  // Initial values
+    Hnm1 = 0;  
     db_dt = 0;
 
     // Definition of the Boundary conditions  :
@@ -213,7 +219,7 @@ int main(){
     socketstream sout_e;
     socketstream sout_j;
     socketstream sout_p;
-    
+
     char vishost[] = "localhost";
     int visport = 19916;
     sout.open(vishost, visport);
@@ -230,9 +236,9 @@ int main(){
     sout_p.precision(8);
     sout_p << "solution\n" << *mesh << Pn << "\nkeys j\n" << std::flush;
 
-    std::string name = "./power_1800.csv";   // Path to csv file for python plot
+    std::string name = "./power_2000.csv";   // Path to csv file for python plot
     std::ofstream data_file(name);                          // ofstream for writing in the file
-    data_file << "t;p_eddy\n0;0\n";                    // Intialising the file with coluns names
+    data_file << "t;p_eddy;flux\n0;0;0\n";                    // Intialising the file with coluns names
 
 
 
@@ -257,38 +263,64 @@ int main(){
         SparseMatrix A_sys;
         Vector X, B;
 
+        // Form linear system taking boundary conditions into account
         r1.FormLinearSystem(ess_tdof_list, Hn, rhs, A_sys, X, B);
 
-        // Résolution du système linéaire : A_sys * X = B
+        // Solving Linear system : A_sys * X = B
         solver.SetOperator(A_sys);
         solver.Mult(B, X);
 
-        // Reconstruire Hn à partir de X
+        // Get solution into Hn
         r1.RecoverFEMSolution(X, rhs, Hn);
 
-        // Mise à jour des champs dérivés (db_dt, Hnm1)
+        // *** Update of GridFunctions from solution Hn ***
+
+        // Update of db_dt with : (db_dt)_n = B1*Hn + B2*Hn-1 + B3*(db_dt)_n-1
         db_dtm1 *= B3;
 
-        GridFunction H_temp(fespace);
+        GridFunction H_temp(fespace); // temporary GridFunction to avoid modifying Hn
         H_temp = Hn;
-        H_temp *= B1;
-        // Hn *= B1;
-        Hnm1 *= B2;
+        H_temp *= B1;  // Hn*B1
+
+        Hnm1 *= B2;     // Hn-1 * B2
 
         db_dt = 0;
         db_dt += H_temp;
         db_dt += Hnm1;
-        db_dt += db_dtm1;
+        db_dt += db_dtm1;  // db_dt up to date
 
-        // Hn /= B1;
-        // db_dtm1 /= B3;
+        Hnm1 /= B2;         // Restoring Hnm1 and db_dtm1 for the update of Bn
+        db_dtm1 /= B3;
+        H_temp /= B1;
+    
+        // ***** Update of Bn ******
+        // Bn = C1 Hn + C2 Hnm1 + C3 Bnm1
+        H_temp *= C1;
+        Hnm1 *= C2;
+        Bnm1 *= C3;
 
-        Hnm1 = Hn;
-        db_dtm1 = db_dt;
+        Bn = H_temp;
+        Bn += Hnm1;
+        Bn += Bnm1; // Bn up to date
 
+        // Update of n-1 iterations 
+        Hnm1 = Hn;          // Storing Hn into Hn-1 for next iteration
+        db_dtm1 = db_dt;    // Same for db_dt
+        Bnm1 = Bn;          // Same for Bn
 
+        // ***** computation of magnetic flux ***********
+        GridFunctionCoefficient B_coeff(&Bn);
+        GridFunction one(fespace);
+        one = 1;
+        LinearForm lf_flux(fespace);
+        lf_flux.AddDomainIntegrator(new DomainLFIntegrator(B_coeff));
+        lf_flux.Assemble();
+
+        real_t flux = lf_flux(one);
+
+        // Computation of J and E
         CurlCustomCoefficient J_coeff(&Hn);
-        Jn.ProjectCoefficient(J_coeff);
+        Jn.ProjectCoefficient(J_coeff);  // Jn = curl(Hn)
 
         GridFunction Jn_temp(fespace_E);
         Jn_temp = Jn;
@@ -305,8 +337,6 @@ int main(){
 
         VectorGridFunctionCoefficient E_coeff(&En);
         PowerLossCoefficient P_eddy_coeff(fespace_E, J_coeff, E_coeff);
-        GridFunction one(fespace);
-        one = 1;
         LinearForm lf(fespace);
         lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
         lf.Assemble();
@@ -317,7 +347,7 @@ int main(){
         Pn.ProjectCoefficient(P_eddy_coeff);
 
 
-        data_file << t << ";" << P_eddy << std::endl;
+        data_file << t << ";" << P_eddy << ";" << flux << std::endl;
 
         bool visualization = false;
         // Visualisation avec GLVis
@@ -350,7 +380,7 @@ int main(){
 real_t bdr_func(const Vector &x, real_t &t)
 {
     real_t r = x[0];
-    NI = I_max * sqrt(2)*sin(2*M_PI*f * t);
+    NI = I_rms * sqrt(2)*sin(2*M_PI*f * t);
     return NI /(2 * M_PI * r); 
 }
 
