@@ -10,8 +10,8 @@
 using namespace mfem;
 
 // NI parameters
-real_t I_max = 0.08;
-real_t f = 100e3;
+real_t I_rms = 0.188181/sqrt(2);
+real_t f = 2000e3;
 
 
 // geometric parameters
@@ -31,26 +31,25 @@ real_t mu = 4300.0 * 4e-7 * M_PI;
 
 real_t tau = 1/(2 * M_PI * 1.8e6);
 
-int num_steps = 10000;
+int num_steps = 1000;
 real_t t = 0.0;
-real_t Ts = 1./f/1000;
+real_t Ts = 1./f/100;
 
 
 
-real_t A3 = sigma * Ts + 2*eps;
-real_t A4 = sigma * Ts - 2*eps;
-real_t A1 = rho * A3 + Ts;
-real_t A2 = rho * A4 + Ts;
+real_t A1 = (rho * (sigma * Ts + 2*eps) + Ts)/(2*eps + Ts*sigma);
+real_t A2 = (rho * (sigma * Ts - 2*eps) + Ts)/(2*eps + Ts*sigma);
+real_t A3 = -(Ts*sigma -2*eps) / (2*eps + Ts*sigma);
 
-// real_t B1 = 1;
-// real_t B2 = 1;
-// real_t B3 = 1;
-// real_t B4 = 1;
 
-real_t C1 = 2*mu;
-real_t C2 = Ts + 2*tau;
-real_t C3 = Ts - 2*tau;
 
+real_t B1 = 2*mu / (Ts + 2*tau);
+real_t B2 = -(2*mu) / (Ts + 2*tau);
+real_t B3 = -(Ts - 2*tau) / (Ts + 2*tau);
+
+real_t C1 = Ts*mu/(Ts+2*tau);
+real_t C2 = Ts*mu/(Ts+2*tau);
+real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
 
 
 real_t NI = 0;
@@ -79,6 +78,21 @@ public:
 };
 
 
+// Class personnalisée permettant de calculer la densité de puissance Re(E.J*) = Re(rho) (||Jr||² + ||Ji||²) 
+class PowerLossCoefficient : public mfem::Coefficient
+{
+private:
+    const FiniteElementSpace *fespace;
+    CurlCustomCoefficient J;
+    mutable mfem::Vector J_vect;
+    VectorGridFunctionCoefficient E;
+    mutable mfem::Vector E_vect;
+
+public:
+    PowerLossCoefficient(const FiniteElementSpace *fespace_, CurlCustomCoefficient &J_, VectorGridFunctionCoefficient &E_);
+    virtual real_t Eval(mfem::ElementTransformation &T, const mfem::IntegrationPoint &ip) override;
+};
+
 
 
 int main(){
@@ -100,6 +114,9 @@ int main(){
     GridFunction db_dt(fespace);
     GridFunction db_dtm1(fespace);
 
+    GridFunction Bn(fespace);
+    GridFunction Bnm1(fespace);
+
     GridFunction En(fespace_E);
     GridFunction Enm1(fespace_E);
 
@@ -107,12 +124,18 @@ int main(){
     GridFunction Jnm1(fespace_E);
     // CurlCustomCoefficient *curl_H_coeff = new CurlCustomCoefficient(&Hn);
 
+    GridFunction Pn(fespace);
+
+    // Initializing all values to 0
+    Bn = 0;
+    Bnm1 = 0;
     En = 0;
     Jn = 0;
+    Jnm1 = 0;
     Enm1 = 0;
     Enm1 = 0;
 
-    Hnm1 = 0;  // Initial values
+    Hnm1 = 0;  
     db_dt = 0;
 
     // Definition of the Boundary conditions  :
@@ -128,37 +151,37 @@ int main(){
     FunctionCoefficient r_coeff(r_coeff_func);
     FunctionCoefficient inv_r_square_coeff(inv_r_square_func);
 
-    ConstantCoefficient A1C2_coeff(A1*C2);
-    ProductCoefficient A1C2_r(A1C2_coeff, r_coeff);
+    ConstantCoefficient A1_coeff(A1);
+    ProductCoefficient A1_r(A1_coeff, r_coeff);
 
-    ConstantCoefficient A3C1(C1*A3);
-    ProductCoefficient A3C1_r(A3C1, r_coeff);
+    ConstantCoefficient B1_coeff(B1);
+    ProductCoefficient B1_r(B1_coeff, r_coeff);
 
-    ProductCoefficient A1C2_r_inv(A1C2_r, inv_r_square_coeff);
+    ProductCoefficient A1_r_inv(A1_r, inv_r_square_coeff);
 
 
-    ConstantCoefficient A2C2_coeff(-A2*C2);
-    ProductCoefficient A2C2_r(A2C2_coeff, r_coeff);
+    ConstantCoefficient A2_coeff(-A2);
+    ProductCoefficient A2_r(A2_coeff, r_coeff);
 
-    ConstantCoefficient A3C1m(-C1*A3);
-    ProductCoefficient A3C1m_r(A3C1m, r_coeff);
+    ConstantCoefficient B2_coeff(-B2);
+    ProductCoefficient B2_r(B2_coeff, r_coeff);
 
-    ProductCoefficient A2C2_r_inv(A2C2_r, inv_r_square_coeff);
+    ProductCoefficient A2_r_inv(A2_r, inv_r_square_coeff);
 
-    ConstantCoefficient k3(C3*A3 - A4*C2);
-    ProductCoefficient k3_r(k3, r_coeff);
+    ConstantCoefficient k(-(B3-A3));
+    ProductCoefficient k_r(k, r_coeff);
 
 
     BilinearForm r1(fespace); 
-    r1.AddDomainIntegrator(new DiffusionIntegrator(A1C2_r));
-    r1.AddDomainIntegrator(new MassIntegrator(A3C1_r));
-    r1.AddDomainIntegrator(new MassIntegrator(A1C2_r_inv));
+    r1.AddDomainIntegrator(new DiffusionIntegrator(A1_r));
+    r1.AddDomainIntegrator(new MassIntegrator(B1_r));
+    r1.AddDomainIntegrator(new MassIntegrator(A1_r_inv));
     r1.Assemble();
 
     BilinearForm r2(fespace); 
-    r2.AddDomainIntegrator(new DiffusionIntegrator(A2C2_r));
-    r2.AddDomainIntegrator(new MassIntegrator(A3C1m_r));
-    r2.AddDomainIntegrator(new MassIntegrator(A2C2_r_inv));
+    r2.AddDomainIntegrator(new DiffusionIntegrator(A2_r));
+    r2.AddDomainIntegrator(new MassIntegrator(B2_r));
+    r2.AddDomainIntegrator(new MassIntegrator(A2_r_inv));
     r2.Assemble();
 
 
@@ -168,14 +191,13 @@ int main(){
     // m->AddDomainIntegrator(new DomainLFIntegrator(k3_r));
     // m->Assemble();
     BilinearForm m(fespace);
-    m.AddDomainIntegrator(new MassIntegrator(k3_r));
+    m.AddDomainIntegrator(new MassIntegrator(k_r));
     m.Assemble();
 
 
     r1.Finalize();
     r2.Finalize();
     m.Finalize();
-
 
 
     SparseMatrix &A = r1.SpMat();
@@ -195,11 +217,14 @@ int main(){
     socketstream sout;
     socketstream sout_e;
     socketstream sout_j;
+    socketstream sout_b;
+
     char vishost[] = "localhost";
     int visport = 19916;
     sout.open(vishost, visport);
     sout_e.open(vishost, visport);
     sout_j.open(vishost, visport);
+    sout_b.open(vishost, visport);
 
     sout.precision(8);
     sout << "solution\n" << *mesh << Hn << "\nkeys j\n" << std::flush;
@@ -207,25 +232,22 @@ int main(){
     sout_e << "solution\n" << *mesh << En << "\nkeys j\n" << std::flush;
     sout_j.precision(8);
     sout_j << "solution\n" << *mesh << Jn << "\nkeys j\n" << std::flush;
+    sout_b.precision(8);
+    sout_b << "solution\n" << *mesh << Bn << "\nkeys j\n" << std::flush;
+
+    std::string name = "./power_2000.csv";   // Path to csv file for python plot
+    std::ofstream data_file(name);                          // ofstream for writing in the file
+    data_file << "t;p_eddy;flux\n0;0;0\n";                    // Intialising the file with coluns names
 
 
-    int vis_steps = 10;
+
+    int vis_steps = 1;
+    // ***************  Time iterations *****************
     for (int step = 0; step < num_steps; step++)
     {
         t += Ts;
-        // std::cout << "H(0) = " << Hn(0) <<  std::endl;
-        // std::cout << "t = " << t << std::endl;
-        std::cout << "NI/(2*pi*Ri) = " << I_max * sqrt(2)*sin(2*M_PI*f * t) /(2*M_PI*Ri) << std::endl;
-        std::cout << "A3 = " << A3 << std::endl;
-        // Mettre à jour BDConditions avec ProjectCoefficient
-        // ....
-        // calcul bdr_coeff
-       // Mettre à jour le coefficient de bord avec le temps courant
-
-        bdr_coeff.SetTime(t);
-
-        // Appliquer la condition de Dirichlet à Hn sur les bords
-        Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr);
+        bdr_coeff.SetTime(t);       // Update boundary conditions fonction's time parameters
+        Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr); // Set new boundary conditions on H
 
         // Mult M * dBdt → MdBdt
         m.Mult(db_dt, MdBdt);
@@ -240,56 +262,95 @@ int main(){
         SparseMatrix A_sys;
         Vector X, B;
 
+        // Form linear system taking boundary conditions into account
         r1.FormLinearSystem(ess_tdof_list, Hn, rhs, A_sys, X, B);
 
-        // Résolution du système linéaire : A_sys * X = B
+        // Solving Linear system : A_sys * X = B
         solver.SetOperator(A_sys);
         solver.Mult(B, X);
 
-        // Reconstruire Hn à partir de X
+        // Get solution into Hn
         r1.RecoverFEMSolution(X, rhs, Hn);
 
-        // Mise à jour des champs dérivés (db_dt, Hnm1)
-        db_dtm1 *= C3 / C2;
+        // *** Update of GridFunctions from solution Hn ***
 
-        Hn *= C1 / C3;
-        Hnm1 *= C1 / C2;
+        // Update of db_dt with : (db_dt)_n = B1*Hn + B2*Hn-1 + B3*(db_dt)_n-1
+        db_dtm1 *= B3;
+
+        GridFunction H_temp(fespace); // temporary GridFunction to avoid modifying Hn
+        H_temp = Hn;
+        H_temp *= B1;  // Hn*B1
+
+        Hnm1 *= B2;     // Hn-1 * B2
 
         db_dt = 0;
-        db_dt += Hn;
-        db_dt -= Hnm1;
-        db_dt -= db_dtm1;
+        db_dt += H_temp;
+        db_dt += Hnm1;
+        db_dt += db_dtm1;  // db_dt up to date
 
-        Hnm1 = Hn;
-        Hnm1 *= C3 / C1;
-        Hn *= C3/C1;
+        Hnm1 /= B2;         // Restoring Hnm1 and db_dtm1 for the update of Bn
+        db_dtm1 /= B3;
+        H_temp /= B1;
+    
+        // ***** Update of Bn ******
+        // Bn = C1 Hn + C2 Hnm1 + C3 Bnm1
+        H_temp *= C1;
+        Hnm1 *= C2;
+        Bnm1 *= C3;
 
+        Bn = H_temp;
+        Bn += Hnm1;
+        Bn += Bnm1; // Bn up to date
 
+        // Update of n-1 iterations 
+        Hnm1 = Hn;          // Storing Hn into Hn-1 for next iteration
+        db_dtm1 = db_dt;    // Same for db_dt
+        Bnm1 = Bn;          // Same for Bn
 
+        // ***** computation of magnetic flux ***********
+        GridFunctionCoefficient B_coeff(&Bn);
+        GridFunction one(fespace);
+        one = 1;
+        LinearForm lf_flux(fespace);
+        lf_flux.AddDomainIntegrator(new DomainLFIntegrator(B_coeff));
+        lf_flux.Assemble();
 
+        real_t flux = lf_flux(one);
+
+        // Computation of J and E
         CurlCustomCoefficient J_coeff(&Hn);
-        Jn.ProjectCoefficient(J_coeff);
+        Jn.ProjectCoefficient(J_coeff);  // Jn = curl(Hn)
 
-        Enm1 *= A4;
+        GridFunction Jn_temp(fespace_E);
+        Jn_temp = Jn;
+        Jn_temp *=A1;
         Jnm1 *= A2;
-        Jn *= A1;
-
-        En += Jn;
-        En += Jnm1;
-        En -= Enm1;
-
-        En *= 1./A3;
-        Jn *= 1./A1;
+        Enm1 *= A3;
+        En = 0;
+        En+=Jn_temp;
+        En+=Jnm1;
+        En+=Enm1;
 
         Enm1 = En;
         Jnm1 = Jn;
 
+        VectorGridFunctionCoefficient E_coeff(&En);
+        PowerLossCoefficient P_eddy_coeff(fespace_E, J_coeff, E_coeff);
+        LinearForm lf(fespace);
+        lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
+        lf.Assemble();
+        real_t P_eddy_tot = 2*M_PI*lf(one);
+        real_t vol = M_PI * height * (Rout*Rout - Ri*Ri);
+        real_t P_eddy = P_eddy_tot/vol;
+
+        Pn.ProjectCoefficient(P_eddy_coeff);
+
+
+        data_file << t << ";" << P_eddy << ";" << flux << std::endl;
+
         bool visualization = true;
-
-        
-
         // Visualisation avec GLVis
-        if (step % vis_steps == 0)
+        if (step % vis_steps == 0 )
         {
             std::cout << "Time step: " << step << ", Time: " << t << std::endl;
 
@@ -302,11 +363,14 @@ int main(){
                      << std::flush;
                 sout_e << "solution\n" << *mesh << En <<  "window_title 'Champ E'" << std::flush;
                 sout_j << "solution\n" << *mesh << Jn <<  "window_title 'Courant J'" << std::flush;
+                sout_b << "solution\n" << *mesh << Bn <<  "window_title 'Puissance P'" << std::flush;
+
                 // std::cin.get(); // Décommenter pour pause manuelle
             }
         }
         
     }
+    data_file.close();
 
 }
 
@@ -315,7 +379,7 @@ int main(){
 real_t bdr_func(const Vector &x, real_t &t)
 {
     real_t r = x[0];
-    NI = I_max * sqrt(2)*sin(2*M_PI*f * t);
+    NI = I_rms * sqrt(2)*sin(2*M_PI*f * t);
     return NI /(2 * M_PI * r); 
 }
 
@@ -359,3 +423,18 @@ void CurlCustomCoefficient::Eval(Vector &V, ElementTransformation &T,
     V[1] = grad_H[0] + H_val /(x[0]);   // dH/dr + H/r
 
 } 
+
+PowerLossCoefficient::PowerLossCoefficient(const FiniteElementSpace *fespace_, CurlCustomCoefficient &J_, VectorGridFunctionCoefficient &E_)
+    : fespace(fespace_),
+      J(J_), J_vect(fespace_->GetMesh()->SpaceDimension()),
+      E(E_), E_vect(fespace_->GetMesh()->SpaceDimension()) {}
+
+real_t PowerLossCoefficient::Eval(ElementTransformation &T,
+                                    const IntegrationPoint &ip)
+{
+    Vector x;               // Vector coordinates
+    T.Transform(ip, x);     // Get the global coordinates in vector x from integration point's coordinates in the element referential
+    J.Eval(J_vect, T, ip);    // Get from J_r (Coefficient) the value at the point ip in J_r_vect
+    E.Eval(E_vect, T, ip);    // same
+    return  (J_vect*E_vect) * x[0];  // Re(rho) * J² * r (Cylindrical coordinates)
+}

@@ -1,107 +1,67 @@
+#include "solver_TD.hpp"
 #include <iostream>
-#include <complex>
-#include "mfem.hpp"
+#include <cmath>
 
+using namespace mfem;
 
 #ifndef M_PI 
 #define M_PI 3.14159265358979323846 
 #endif
 
-using namespace mfem;
+void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrite ferrite, bool visualization){
 
-// NI parameters
-real_t I_rms = 0.188181/sqrt(2);
-real_t f = 2000e3;
-
-
-// geometric parameters
-real_t Ri = 9.6e-3/2.0;
-real_t height = 7.59e-3;
-real_t w = 5.3e-3;
-real_t Rout = Ri + w;
-real_t Rm = (Rout - Ri) / 2;
-
-// ****** Ferrite parameters ******
-
-// Ferrite N30
-real_t rho = 5.98e-2;
-real_t sigma = 4.44e-1;
-real_t eps = 2.48e-6;
-real_t mu = 4300.0 * 4e-7 * M_PI;
-
-real_t tau = 1/(2 * M_PI * 1.8e6);
-
-int num_steps = 1000;
-real_t t = 0.0;
-real_t Ts = 1./f/100;
+    // geometric parameters
+    real_t Ri = 9.6e-3/2.0;
+    real_t height = 7.59e-3;
+    real_t w = 5.3e-3;
+    real_t Rout = Ri + w;
+    real_t Rm = (Rout - Ri) / 2;
 
 
+    // ****** Ferrite parameters ******
+    real_t rho = ferrite.rho;
+    real_t sigma = ferrite.sigma;
+    real_t eps = ferrite.eps;
+    real_t mu = ferrite.mu; 
+    
+    real_t tau = 1/(2 * M_PI * 1.8e6);
 
-real_t A1 = (rho * (sigma * Ts + 2*eps) + Ts)/(2*eps + Ts*sigma);
-real_t A2 = (rho * (sigma * Ts - 2*eps) + Ts)/(2*eps + Ts*sigma);
-real_t A3 = -(Ts*sigma -2*eps) / (2*eps + Ts*sigma);
+    // int num_steps = 1000;
+    real_t t = 0.0;
 
+    real_t A1 = (rho * (sigma * Ts + 2*eps) + Ts)/(2*eps + Ts*sigma);
+    real_t A2 = (rho * (sigma * Ts - 2*eps) + Ts)/(2*eps + Ts*sigma);
+    real_t A3 = -(Ts*sigma -2*eps) / (2*eps + Ts*sigma);
 
+    real_t B1 = 2*mu / (Ts + 2*tau);
+    real_t B2 = -(2*mu) / (Ts + 2*tau);
+    real_t B3 = -(Ts - 2*tau) / (Ts + 2*tau);
 
-real_t B1 = 2*mu / (Ts + 2*tau);
-real_t B2 = -(2*mu) / (Ts + 2*tau);
-real_t B3 = -(Ts - 2*tau) / (Ts + 2*tau);
+    real_t C1 = Ts*mu/(Ts+2*tau);
+    real_t C2 = Ts*mu/(Ts+2*tau);
+    real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
 
-real_t C1 = Ts*mu/(Ts+2*tau);
-real_t C2 = Ts*mu/(Ts+2*tau);
-real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
+    real_t NI = 0; // For now, initialized to 0;
 
+    // // Boundary conditions function
+    auto bdr_func = [&](const Vector &x) -> real_t
+    {
+        real_t r = x(0); // Accès au premier élément du vecteur x
+        real_t NI = I_rms * std::sqrt(2) * std::sin(2 * M_PI * f * t);
+        return NI / (2 * M_PI * r);
+    };
 
-
-real_t NI = 0;
-
-real_t bdr_func(const Vector &x, real_t &t);
-
-real_t r_coeff_func(const Vector &x);
-
-real_t inv_r_square_func(const Vector &x);
-
-
-class CurlCustomCoefficient : public VectorCoefficient
-{
-protected:
-   const GridFunction *GridFunc;
-
-public:
-   CurlCustomCoefficient(const GridFunction *gf);
-   void SetGridFunction(const GridFunction *gf);
-   const GridFunction * GetGridFunction() const { return GridFunc; }
-
-   void Eval(Vector &V, ElementTransformation &T,
-             const IntegrationPoint &ip) override;
-
-   virtual ~CurlCustomCoefficient() { }
-};
+    // // Function used for the integration because of the cylindrical coordinates
+    auto r_coeff_func = [](const Vector &x){
+        return x[0];
+    };
 
 
-// Class personnalisée permettant de calculer la densité de puissance Re(E.J*) = Re(rho) (||Jr||² + ||Ji||²) 
-class PowerLossCoefficient : public mfem::Coefficient
-{
-private:
-    const FiniteElementSpace *fespace;
-    CurlCustomCoefficient J;
-    mutable mfem::Vector J_vect;
-    VectorGridFunctionCoefficient E;
-    mutable mfem::Vector E_vect;
-
-public:
-    PowerLossCoefficient(const FiniteElementSpace *fespace_, CurlCustomCoefficient &J_, VectorGridFunctionCoefficient &E_);
-    virtual real_t Eval(mfem::ElementTransformation &T, const mfem::IntegrationPoint &ip) override;
-};
-
-
-
-int main(){
-    const char *path = "../../../mesh/square.msh";             // Path to the mesh
-
-    Mesh *mesh = new Mesh(path, 1, 1);
-    // mesh->UniformRefinement();
-
+    // Function for the correcting factor rho/r² 
+    auto inv_r_square_func = [](const Vector &x){
+        return (real_t)1./pow(x[0],2);
+    };
+    
     int order = 2;                      // elements order : 2
     int dim = mesh->Dimension();        // Mesh dimension : 2
 
@@ -128,6 +88,7 @@ int main(){
     GridFunction Pn(fespace);
 
     // Initializing all values to 0
+    Hn = 0;
     Bn = 0;
     Bnm1 = 0;
     En = 0;
@@ -145,7 +106,8 @@ int main(){
     dir_bdr = 1; // All the borders have boundary conditions
     fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
 
-    FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
+    // FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
+    FunctionCoefficient bdr_coeff(bdr_func);
     Hnm1.ProjectBdrCoefficient(bdr_coeff, dir_bdr);
 
     // **** Coefficients for bilinear forms
@@ -214,35 +176,38 @@ int main(){
     solver.SetMaxIter(5000);
     solver.SetPrintLevel(0);
 
-
     socketstream sout;
     socketstream sout_e;
     socketstream sout_j;
-    socketstream sout_p;
+    socketstream sout_b;
 
     char vishost[] = "localhost";
     int visport = 19916;
-    sout.open(vishost, visport);
-    sout_e.open(vishost, visport);
-    sout_j.open(vishost, visport);
-    sout_p.open(vishost, visport);
 
-    sout.precision(8);
-    sout << "solution\n" << *mesh << Hn << "\nkeys j\n" << std::flush;
-    sout_e.precision(8);
-    sout_e << "solution\n" << *mesh << En << "\nkeys j\n" << std::flush;
-    sout_j.precision(8);
-    sout_j << "solution\n" << *mesh << Jn << "\nkeys j\n" << std::flush;
-    sout_p.precision(8);
-    sout_p << "solution\n" << *mesh << Pn << "\nkeys j\n" << std::flush;
+    if (visualization)
+    {
+        sout.open(vishost, visport);
+        sout_e.open(vishost, visport);
+        sout_j.open(vishost, visport);
+        sout_b.open(vishost, visport);
 
-    std::string name = "./power_2000.csv";   // Path to csv file for python plot
+        sout.precision(8);
+        sout << "solution\n" << *mesh << Hn << "\nkeys j\n" << std::flush;
+        sout_e.precision(8);
+        sout_e << "solution\n" << *mesh << En << "\nkeys j\n" << std::flush;
+        sout_j.precision(8);
+        sout_j << "solution\n" << *mesh << Jn << "\nkeys j\n" << std::flush;
+        sout_b.precision(8);
+        sout_b << "solution\n" << *mesh << Bn << "\nkeys j\n" << std::flush;
+    }
+
+    std::string name = "./data/TD_" + std::to_string((int)f/1000) + ".csv";   // Path to csv file for python plot
     std::ofstream data_file(name);                          // ofstream for writing in the file
     data_file << "t;p_eddy;flux\n0;0;0\n";                    // Intialising the file with coluns names
 
 
 
-    int vis_steps = 100;
+    int vis_steps = 1000;
     // ***************  Time iterations *****************
     for (int step = 0; step < num_steps; step++)
     {
@@ -269,7 +234,6 @@ int main(){
         // Solving Linear system : A_sys * X = B
         solver.SetOperator(A_sys);
         solver.Mult(B, X);
-
         // Get solution into Hn
         r1.RecoverFEMSolution(X, rhs, Hn);
 
@@ -336,7 +300,7 @@ int main(){
         Jnm1 = Jn;
 
         VectorGridFunctionCoefficient E_coeff(&En);
-        PowerLossCoefficient P_eddy_coeff(fespace_E, J_coeff, E_coeff);
+        PowerLossCoefficient_TD P_eddy_coeff(fespace_E, J_coeff, E_coeff);
         LinearForm lf(fespace);
         lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
         lf.Assemble();
@@ -349,7 +313,6 @@ int main(){
 
         data_file << t << ";" << P_eddy << ";" << flux << std::endl;
 
-        bool visualization = false;
         // Visualisation avec GLVis
         if (step % vis_steps == 0 )
         {
@@ -364,7 +327,7 @@ int main(){
                      << std::flush;
                 sout_e << "solution\n" << *mesh << En <<  "window_title 'Champ E'" << std::flush;
                 sout_j << "solution\n" << *mesh << Jn <<  "window_title 'Courant J'" << std::flush;
-                sout_p << "solution\n" << *mesh << Pn <<  "window_title 'Puissance P'" << std::flush;
+                sout_b << "solution\n" << *mesh << Bn <<  "window_title 'Field B'" << std::flush;
 
                 // std::cin.get(); // Décommenter pour pause manuelle
             }
@@ -376,61 +339,12 @@ int main(){
 }
 
 
-// Boundary conditions function
-real_t bdr_func(const Vector &x, real_t &t)
-{
-    real_t r = x[0];
-    NI = I_rms * sqrt(2)*sin(2*M_PI*f * t);
-    return NI /(2 * M_PI * r); 
-}
-
-// Function used for the integration because of the cylindrical coordinates
-real_t r_coeff_func(const Vector &x){
-    return x[0];  
-}
-
-// Function for the correcting factor rho/r² 
-real_t inv_r_square_func(const Vector &x){
-    return (real_t)1./pow(x[0],2);
-}
-
-
-// Constructor of custom curl of an axisymetric problem 
-CurlCustomCoefficient::CurlCustomCoefficient (const GridFunction *gf)  // takes only a gridFunction as argument
-    : VectorCoefficient((gf) ? gf -> FESpace() -> GetMesh() -> SpaceDimension() : 0)  
-{
-   GridFunc = gf;
-}
-
-void CurlCustomCoefficient::SetGridFunction(const GridFunction *gf)
-{
-   GridFunc = gf; vdim = (gf) ?
-                         gf -> FESpace() -> GetMesh() -> SpaceDimension() : 0;
-}
-
-void CurlCustomCoefficient::Eval(Vector &V, ElementTransformation &T,
-                                           const IntegrationPoint &ip)
-{
-    Vector x;           // Vector of the coordinates (r, z)
-    T.Transform(ip, x); // Get the coordinates of the point ip in vector x, because ip has its coordinates in the element's referential                
-
-    real_t H_val = GridFunc->GetValue(T, ip);   // Get value of H in indicated coordinates
-
-    Vector grad_H(2);     // Gradient vector            
-    GridFunc->GetGradient(T, grad_H); // Evaluating the gradient value at the integration point ip
-                                      // In this case, ip is already linked to the ElementTransformation
-
-    V[0] = -grad_H[1];                  // - dH/dz
-    V[1] = grad_H[0] + H_val /(x[0]);   // dH/dr + H/r
-
-} 
-
-PowerLossCoefficient::PowerLossCoefficient(const FiniteElementSpace *fespace_, CurlCustomCoefficient &J_, VectorGridFunctionCoefficient &E_)
+PowerLossCoefficient_TD::PowerLossCoefficient_TD(const FiniteElementSpace *fespace_, CurlCustomCoefficient &J_, VectorGridFunctionCoefficient &E_)
     : fespace(fespace_),
       J(J_), J_vect(fespace_->GetMesh()->SpaceDimension()),
       E(E_), E_vect(fespace_->GetMesh()->SpaceDimension()) {}
 
-real_t PowerLossCoefficient::Eval(ElementTransformation &T,
+real_t PowerLossCoefficient_TD::Eval(ElementTransformation &T,
                                     const IntegrationPoint &ip)
 {
     Vector x;               // Vector coordinates
@@ -439,3 +353,6 @@ real_t PowerLossCoefficient::Eval(ElementTransformation &T,
     E.Eval(E_vect, T, ip);    // same
     return  (J_vect*E_vect) * x[0];  // Re(rho) * J² * r (Cylindrical coordinates)
 }
+
+Ferrite::Ferrite(const char* name_, real_t rho_, real_t sigma_, real_t eps_, real_t mu_r_)
+    : name(name_),  rho(rho_), sigma(sigma_), eps(eps_), mu(4e-7*M_PI*mu_r_){}

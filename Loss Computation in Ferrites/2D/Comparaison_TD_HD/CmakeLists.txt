@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD 11)
 find_package(MFEM REQUIRED)
 
 
-add_executable(main main.cpp)
+add_executable(main main.cpp ../customcurl.cpp ../Time_Domain/solver_TD.cpp ../Harmonic_domain/solver.cpp)
 
 target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(main mfem) 

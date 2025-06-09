@@ -28,7 +28,13 @@ F = data0['fc']/1000
 P_eddy= data0['P_eddy']/1000
 P_mag = data0["P_mag"]/1000
 P_tot = data0["P_tot"]/1000
-flux = data0['flux']
+flux_r = data0['flux_r']
+flux_i = data0['flux_i']
+
+flux = flux_r + 1j*flux_i
+angle = np.angle(flux)
+
+print(angle)
 
 plt.figure()
 plt.plot(f1, Losses1,'-o', label="Measurements")

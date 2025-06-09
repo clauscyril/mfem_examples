@@ -5,7 +5,7 @@ import pandas as pd
 import os
 
 current_path = os.path.dirname(os.path.abspath(__file__))
-data_path = os.path.join(current_path, "build", "datafolder", "donnes_riccardo", "simul_N30_10mT.txt")
+data_path = os.path.join(current_path, "build", "datafolder", "donnees_riccardo", "simul_N30_10mT.txt")
 data_sim_path = os.path.join(current_path, "build", "datafolder", "data_tau_fixed.csv")
 
 data = pd.read_csv(data_path, sep=" ")
