@@ -8,7 +8,10 @@ using namespace mfem;
 #define M_PI 3.14159265358979323846 
 #endif
 
-void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrite ferrite, bool visualization){
+void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
+
+    real_t Ts = t_f/(num_steps);
+
 
     // geometric parameters
     real_t Ri = 9.6e-3/2.0;
@@ -16,7 +19,7 @@ void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrit
     real_t w = 5.3e-3;
     real_t Rout = Ri + w;
     real_t Rm = (Rout - Ri) / 2;
-
+    int iter = 0;
 
     // ****** Ferrite parameters ******
     real_t rho = ferrite.rho;
@@ -43,12 +46,11 @@ void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrit
 
     real_t NI = 0; // For now, initialized to 0;
 
-    // // Boundary conditions function
-    auto bdr_func = [&](const Vector &x) -> real_t
+    // Boundary conditions function
+    auto bdr_func = [&](const Vector &x, real_t t) -> real_t
     {
         real_t r = x(0); // Accès au premier élément du vecteur x
-        real_t NI = I_rms * std::sqrt(2) * std::sin(2 * M_PI * f * t);
-        return NI / (2 * M_PI * r);
+        return NI_func(t) / (2 * M_PI * r);
     };
 
     // // Function used for the integration because of the cylindrical coordinates
@@ -106,11 +108,11 @@ void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrit
     dir_bdr = 1; // All the borders have boundary conditions
     fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
 
-    // FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
-    FunctionCoefficient bdr_coeff(bdr_func);
+    FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
+    // FunctionCoefficient bdr_coeff(bdr_func);
     Hnm1.ProjectBdrCoefficient(bdr_coeff, dir_bdr);
 
-    // **** Coefficients for bilinear forms
+    // **** Coefficients for bilinear forms ****
     FunctionCoefficient r_coeff(r_coeff_func);
     FunctionCoefficient inv_r_square_coeff(inv_r_square_func);
 
@@ -133,8 +135,9 @@ void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrit
 
     ConstantCoefficient k(-(B3-A3));
     ProductCoefficient k_r(k, r_coeff);
+    // **************************************************
 
-
+    // ******* Definition of Bilinear and Linear Forms ********
     BilinearForm r1(fespace); 
     r1.AddDomainIntegrator(new DiffusionIntegrator(A1_r));
     r1.AddDomainIntegrator(new MassIntegrator(B1_r));
@@ -147,35 +150,30 @@ void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrit
     r2.AddDomainIntegrator(new MassIntegrator(A2_r_inv));
     r2.Assemble();
 
-
-    // Initialisation à 0
-    // GridFunctionCoefficient db_dt_coeff(&db_dt); 
-    // LinearForm *m = new LinearForm(fespace);
-    // m->AddDomainIntegrator(new DomainLFIntegrator(k3_r));
-    // m->Assemble();
     BilinearForm m(fespace);
     m.AddDomainIntegrator(new MassIntegrator(k_r));
     m.Assemble();
-
 
     r1.Finalize();
     r2.Finalize();
     m.Finalize();
 
-
+    // Parameters for the linear system
     SparseMatrix &A = r1.SpMat();
     Vector rhs(fespace->GetTrueVSize());
     Vector R2Hnm1(fespace->GetTrueVSize());
     Vector MdBdt(fespace->GetTrueVSize());
 
-    Vector x(fespace->GetTrueVSize()); // Pour stocker solution complète
+    Vector x(fespace->GetTrueVSize()); // For defining the linear system, considering Dirichlet's bdc
 
+    // Solver for the linear system
     CGSolver solver;
     solver.SetOperator(A);
     solver.SetRelTol(1e-12);
     solver.SetMaxIter(5000);
     solver.SetPrintLevel(0);
 
+    // Sockets stream for showing the results using glvis (if visualization is set to true) 
     socketstream sout;
     socketstream sout_e;
     socketstream sout_j;
@@ -184,7 +182,7 @@ void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrit
     char vishost[] = "localhost";
     int visport = 19916;
 
-    if (visualization)
+    if (visualization)  // Initialize the ploting of the results
     {
         sout.open(vishost, visport);
         sout_e.open(vishost, visport);
@@ -201,27 +199,30 @@ void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrit
         sout_b << "solution\n" << *mesh << Bn << "\nkeys j\n" << std::flush;
     }
 
-    std::string name = "./data/TD_" + std::to_string((int)f/1000) + ".csv";   // Path to csv file for python plot
-    std::ofstream data_file(name);                          // ofstream for writing in the file
-    data_file << "t;p_eddy;flux\n0;0;0\n";                    // Intialising the file with coluns names
+    // File for saving the values of the power and flux for each iterations
+    std::string name = "./data/TD_" + std::to_string(1) + ".csv";   
+    std::ofstream data_file(name);                         
+    data_file << "t;p_eddy;flux;NI\n0;0;0\n";  // Intialising the file with coluns names and first values to 0
 
 
-
-    int vis_steps = 1000;
+    int vis_steps = 10;  // Number of iterations between two visualizations
     // ***************  Time iterations *****************
     for (int step = 0; step < num_steps; step++)
-    {
-        t += Ts;
+    {   
+        iter++;
+
+        // std::cout << iter%100 << std::endl;
+        t += Ts;                    // New time 
         bdr_coeff.SetTime(t);       // Update boundary conditions fonction's time parameters
-        Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr); // Set new boundary conditions on H
+        Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr); // Setting new boundary conditions on H
 
         // Mult M * dBdt → MdBdt
-        m.Mult(db_dt, MdBdt);
+        m.Mult(db_dtm1, MdBdt);
 
         // Mult R2 * Hnm1 → R2Hnm1
         r2.Mult(Hnm1, R2Hnm1);
 
-        // RHS = R2Hnm1 + MdBdt
+        // RHS = R2Hnm1 + MdBdt = R2* * Hnm1 + M * dBnm1/dt
         rhs = R2Hnm1;
         rhs += MdBdt;
         
@@ -311,7 +312,7 @@ void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrit
         Pn.ProjectCoefficient(P_eddy_coeff);
 
 
-        data_file << t << ";" << P_eddy << ";" << flux << std::endl;
+        data_file << t << ";" << P_eddy << ";" << flux << ";" << NI_func(t) << std::endl;
 
         // Visualisation avec GLVis
         if (step % vis_steps == 0 )
@@ -350,9 +351,6 @@ real_t PowerLossCoefficient_TD::Eval(ElementTransformation &T,
     Vector x;               // Vector coordinates
     T.Transform(ip, x);     // Get the global coordinates in vector x from integration point's coordinates in the element referential
     J.Eval(J_vect, T, ip);    // Get from J_r (Coefficient) the value at the point ip in J_r_vect
-    E.Eval(E_vect, T, ip);    // same
-    return  (J_vect*E_vect) * x[0];  // Re(rho) * J² * r (Cylindrical coordinates)
+    E.Eval(E_vect, T, ip);    // same for E
+    return  (J_vect*E_vect) * x[0];  // J.E * r (Cylindrical coordinates)
 }
-
-Ferrite::Ferrite(const char* name_, real_t rho_, real_t sigma_, real_t eps_, real_t mu_r_)
-    : name(name_),  rho(rho_), sigma(sigma_), eps(eps_), mu(4e-7*M_PI*mu_r_){}

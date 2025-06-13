@@ -1,7 +1,8 @@
 #ifndef SOLVERS_TD_HPP
 #define SOLVERS_TD_HPP
 
-#include "../customcurl.hpp"
+#include "../headers/customcurl.hpp"
+#include "../headers/Ferrite.hpp"
 #include <mfem.hpp>
 
 using namespace mfem;
@@ -12,17 +13,7 @@ using namespace mfem;
 
 
 
-struct Ferrite
-{
-    std::string name;
-    real_t rho;
-    real_t sigma;
-    real_t eps;
-    real_t mu; 
-    Ferrite(const char* name_, real_t rho_, real_t sigma_, real_t eps_, real_t mu_r_); 
-};
-
-void TD_sim(Mesh *mesh, real_t I_rms, real_t f, real_t Ts, int num_steps, Ferrite ferrite, bool visualization);
+void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization);
 
 
 class PowerLossCoefficient_TD : public mfem::Coefficient

@@ -1,16 +1,43 @@
-cmake_minimum_required(VERSION 3.10)
+# cmake_minimum_required(VERSION 3.10)
+
+# project(MFEMExample)
+
+# set(CMAKE_CXX_STANDARD 11)
+
+
+# # find_package(MFEM REQUIRED)
+
+# set(MFEM_INCLUDE_DIR "C:/msys64/ucrt64/include")
+# set(MFEM_LIBRARY_DIR "C:/msys64/ucrt64/lib")
+# include_directories("C:/msys64/ucrt64/include/suitesparse")
+
+# add_executable(main main.cpp ../source/customcurl.cpp solver_TD.cpp)
+
+# target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# target_link_libraries(main mfem) 
+
+cmake_minimum_required(VERSION 3.16)
 
 project(MFEMExample)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Ajoute le chemin aux fichiers .cmake de MSYS2 (si nécessaire)
+list(APPEND CMAKE_PREFIX_PATH "C:/msys64/ucrt64")
 
-# set(MFEM_INCLUDE_DIR "C:/Program Files (x86)/mfem/lib/cmake/mfem" CACHE PATH "Fix chemin MFEM")
-# set(MFEM_DIR "C:/Program Files (x86)/mfem/" CACHE PATH "Chemin MFEM avec MSYS2 UCRT")
-find_package(MFEM REQUIRED)
+# Trouve MFEM installé par MSYS2
+find_package(MFEM REQUIRED CONFIG)
 
+# Crée l'exécutable
+add_executable(main
+    main.cpp
+    ../source/customcurl.cpp
+    solver_TD.cpp
+)
 
-add_executable(main main2.cpp ../customcurl.cpp solver_TD.cpp ../Harmonic_domain/solver.cpp)
-
+# Ajoute les includes locaux
 target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(main mfem) 
+
+# Lien automatique avec toutes les dépendances trouvées par MFEM
+target_link_libraries(main PRIVATE mfem)
