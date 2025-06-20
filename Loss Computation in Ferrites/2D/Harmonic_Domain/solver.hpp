@@ -2,7 +2,8 @@
 #define SOLVERS_HPP
 
 #include <mfem.hpp>
-#include "../customcurl.hpp"
+#include "../headers/customcurl.hpp"
+#include "../headers/Ferrite.hpp"
 
 using namespace mfem;
 
@@ -41,6 +42,6 @@ public:
 
 
 // Fonction qui calcule la puissance moyenne sur la surface (W/m^3)
-void GetPowerLoss(const char* path, real_t fc, real_t fc_mu, real_t &P_loss_eddy, real_t &P_loss_mag, std::complex<real_t> &flux, real_t &Imax);
+void GetPowerLoss(Mesh* mesh, real_t fc, real_t fc_mu, real_t &P_loss_eddy, real_t &P_loss_mag, std::complex<real_t> &flux, real_t &Imax, const bool visualization);
 
 #endif // SOLVERS_HPP

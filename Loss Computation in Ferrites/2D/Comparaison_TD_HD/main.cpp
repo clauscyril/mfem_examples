@@ -2,7 +2,8 @@
 #include <complex>
 #include "mfem.hpp"
 
-// #include "../customcurl.hpp"
+#include "../headers/customcurl.hpp" 
+#include "../headers/Ferrite.hpp"
 #include "../Harmonic_Domain/solver.hpp"
 #include "../Time_Domain/solver_TD.hpp"
 
@@ -12,7 +13,7 @@ int main() {
     const char *path = "../../../mesh/square.msh";
     Mesh *mesh = new Mesh(path, 1, 1); 
 
-
+    // Defining the differents Ferrites and their parameters
     Ferrite N30("N30", 5.98e-2, 4.44e-1, 2.48e-6, 4300);
     Ferrite N87("N87", 4.24e-2, 1.48e-1, 2.68e-6, 2200);
     Ferrite T38("T38", 4.04e-2, 1.07e1, 8.06e-6, 10000);
@@ -24,7 +25,6 @@ int main() {
     real_t P_eddy, P_mag;
     std::complex<real_t> flux = 0;
     real_t imax = 0;
-
 
 
     // Frequency range for the simulation
@@ -45,8 +45,8 @@ int main() {
         GetPowerLoss(path, f, 1.8e6, P_eddy, P_mag, flux, imax);
         data_file << f << ";" << P_eddy << ";" << flux.real() << ";" << flux.imag() << std::endl;
         
-        real_t I_rms = imax/sqrt(2);
-        real_t Ts = 1/f / 100;
+        real_t I_rms = imax/sqrt(2);        // For now, the source term is a sine wave 
+        real_t Ts = 1/f / 100;              // 100 echantillons par période
         int nb_period = 6;
 
         TD_sim(mesh, I_rms, f, Ts, (int)nb_period/(f*Ts), N30, 0);

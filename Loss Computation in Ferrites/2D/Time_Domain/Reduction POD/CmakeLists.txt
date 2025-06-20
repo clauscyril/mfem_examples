@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.10)
+
+project(MFEMExample)
+
+set(CMAKE_CXX_STANDARD 17)
+
+
+# Find MPI
+find_package(MPI REQUIRED)
+find_package(MFEM REQUIRED CONFIG)
+
+# libROM configuration
+set(LIBROM_DIR "C:/Program Files (x86)/libROM")
+include_directories(${LIBROM_DIR}/include)
+link_directories(${LIBROM_DIR}/lib)
+
+add_executable(main main.cpp  
+                    ../../source/customcurl.cpp 
+                    solver_TD_FOM.cpp)
+
+target_include_directories(main PRIVATE
+    ${MFEM_INCLUDE_DIRS}
+    ${LIBROM_DIR}/include
+)
+
+target_link_libraries(main PRIVATE
+    mfem
+    ROM
+    MPI::MPI_CXX
+)

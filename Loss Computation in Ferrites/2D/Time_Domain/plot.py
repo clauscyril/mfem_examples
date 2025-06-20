@@ -12,15 +12,18 @@ t = data["t"]
 p_eddy = data["p_eddy"]/1000
 flux = data["flux"]
 NI = data['NI']
+fluxH = data['fluxH']
+phiH = data["phiH"]
 
 # f = 100e3
 # T = 1/f
 # Ts = T/1000
 
 # t = t[500:]
-p_eddy = np.array(p_eddy[500:])
+# p_eddy = np.array(p_eddy[500:])
 
-print(np.mean(p_eddy[500:]))
+
+print(np.mean(p_eddy[200:]))    
 
 
 # plt.figure()
@@ -63,4 +66,12 @@ ax2.grid(True)
 
 # Ajustement automatique
 plt.tight_layout()
+
+plt.figure()
+plt.plot(t,p_eddy)
+plt.figure()
+plt.plot(t,fluxH,  label="Flux de H")
+plt.plot(t,phiH, '--', label="Flux de H from phi de b")
+plt.grid()
+plt.legend()
 plt.show()

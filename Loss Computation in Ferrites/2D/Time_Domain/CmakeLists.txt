@@ -1,43 +1,31 @@
-# cmake_minimum_required(VERSION 3.10)
-
-# project(MFEMExample)
-
-# set(CMAKE_CXX_STANDARD 11)
-
-
-# # find_package(MFEM REQUIRED)
-
-# set(MFEM_INCLUDE_DIR "C:/msys64/ucrt64/include")
-# set(MFEM_LIBRARY_DIR "C:/msys64/ucrt64/lib")
-# include_directories("C:/msys64/ucrt64/include/suitesparse")
-
-# add_executable(main main.cpp ../source/customcurl.cpp solver_TD.cpp)
-
-# target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-# target_link_libraries(main mfem) 
-
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.10)
 
 project(MFEMExample)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Ajoute le chemin aux fichiers .cmake de MSYS2 (si nécessaire)
-list(APPEND CMAKE_PREFIX_PATH "C:/msys64/ucrt64")
 
-# Trouve MFEM installé par MSYS2
-find_package(MFEM REQUIRED CONFIG)
+# set(MFEM_DIR, "C:/msys64/ucrt64/lib/cmake/mfem")
+# list(APPEND CMAKE_PREFIX_PATH "C:/msys64/ucrt64")
+# find_package(Ginkgo REQUIRED)
 
-# Crée l'exécutable
-add_executable(main
-    main.cpp
-    ../source/customcurl.cpp
-    solver_TD.cpp
-)
+set(MFEM_DIR, "C:/Program Files (x86)/mfem/lib/cmake/mfem")
+# find_package(MFEM REQUIRED CONFIG)
+find_package(MFEM REQUIRED)
 
-# Ajoute les includes locaux
+
+
+# Inclure les headers de MFEM & Suitesparse
+# include_directories(
+#     "C:/msys64/ucrt64/include"
+#     "C:/msys64/ucrt64/include/mfem"
+#     "C:/msys64/ucrt64/include/suitesparse"
+# )
+
+# link_directories("C:/msys64/ucrt64/lib")
+
+
+add_executable(main main.cpp ../source/customcurl.cpp solver_TD.cpp)
+
 target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-
-# Lien automatique avec toutes les dépendances trouvées par MFEM
-target_link_libraries(main PRIVATE mfem)
+target_link_libraries(main mfem)

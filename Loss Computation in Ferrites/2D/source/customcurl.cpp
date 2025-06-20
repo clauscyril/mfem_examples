@@ -30,3 +30,24 @@ void CurlCustomCoefficient::Eval(Vector &V, ElementTransformation &T,
     V[1] = grad_H[0] + H_val /(x[0]);   // dH/dr + H/r
 
 } 
+
+// if(0)
+//     {
+//         V[0] = -grad_H[1];                  // - dH/dz
+//         V[1] = grad_H[0] + H_val /(x[0]);   // dH/dr + H/r
+//     }
+//     {
+//         int order = 1;
+//         int dim = 2;
+//         FiniteElementSpace fespace_h1 = const_cast<FiniteElementSpace> (GridFunc->FESpace());
+//         ND_FECollection fe_coll_nd(order, dim);
+//         // FiniteElementSpace fespace_nd(GridFunc->FESpace()->GetMesh(), &fe_coll_nd);
+//         FiniteElementSpace fespace_nd(fespace_h1->GetMesh(), &fe_coll_nd);
+//         GridFunction dx(&fespace_nd);
+//         DiscreteLinearOperator *grad = new DiscreteLinearOperator(fespace_h1, &fespace_nd);
+//         grad->AddDomainInterpolator(new GradientInterpolator);
+//         grad->Assemble();
+//         grad->Finalize();
+//         grad->Mult( *(GridFunc), dx);    
+//         V = dx.GetTrueVector();        
+//     }
