@@ -172,6 +172,7 @@ void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
     Vector x(fespace->GetTrueVSize()); // For defining the linear system, considering Dirichlet's bdc
 
     // Solver for the linear system
+    
     CGSolver solver;
     solver.SetOperator(A);
     solver.SetRelTol(1e-12);
@@ -210,7 +211,7 @@ void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
     data_file << "t;p_eddy;flux;NI;fluxH;phiH\n0;0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
 
 
-    int vis_steps = 10;  // Number of iterations between two visualizations
+    int vis_steps = 1;  // Number of iterations between two visualizations
     // ***************  Time iterations *****************
     for (int step = 0; step < num_steps; step++)
     {   
@@ -409,7 +410,7 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         return (real_t)1./pow(x[0],2);
     };
     
-    int order = 1;                      // elements order : 1
+    int order = 2;                      // elements order : 1
     int dim = mesh->Dimension();        // Mesh dimension : 2
 
     FiniteElementCollection *fec = new H1_FECollection(order, dim); 
@@ -454,10 +455,18 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
 
     // Definition of the Boundary conditions  :
     Array<int> ess_tdof_list;
-    // Array<int> dir_bdr(mesh->bdr_attributes.Max());
-    // dir_bdr = 0; // No boundary conditions
-    // fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
-    fespace->GetBoundaryTrueDofs(ess_tdof_list);
+    Array<int> ess_tdof_list_2;
+    Array<int> dir_bdr(mesh->bdr_attributes.Max());
+    dir_bdr = 1; // No boundary conditions
+    Array<int> dir_bdr_2(mesh->bdr_attributes.Max());
+    dir_bdr_2 = 0;
+    dir_bdr_2[1] = 1; // No boundary conditions
+    dir_bdr_2[2] = 1; // No boundary conditions
+    dir_bdr_2[3] = 1; // No boundary conditions
+    dir_bdr_2[0] = 1; // No boundary conditions
+    fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
+    fespace->GetEssentialTrueDofs(dir_bdr_2, ess_tdof_list_2);
+    // fespace->GetBoundaryTrueDofs(ess_tdof_list);
 
     // **** Coefficients for bilinear forms ****
     FunctionCoefficient r_coeff(r_coeff_func);
@@ -484,6 +493,7 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
     ProductCoefficient k_r(k, r_coeff);
 
     ConstantCoefficient k2(1/M_PI/2);
+    ConstantCoefficient k3(2*M_PI);
     ProductCoefficient inv_r(r_coeff, inv_r_square_coeff);
     ProductCoefficient k_inv_r(k2,inv_r);
     // **************************************************
@@ -519,15 +529,16 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
     lf.Assemble();
 
     LinearForm lf2(fespace);
-
-    lf2.AddDomainIntegrator(new BoundaryLFIntegrator(k_inv_r));
+    ProductCoefficient deux_pi_r(r_coeff, k3);
+    lf2.AddBoundaryIntegrator(new BoundaryLFIntegrator(deux_pi_r), dir_bdr);
+    // lf2.AddBouIntegrator(new BoundaryLFIntegrator(k_inv_r));
     lf2.Assemble();
     
 
     Vector B_vect = lf;
     Vector B_vect2 = lf2;
 
-    std::cout << B_vect.Size() << " , " << B_vect2.Size() << std::endl; 
+    // std::cout << B_vect.Size() << " , " << B_vect2.Size() << std::endl; 
 
     DenseMatrix Bmat_T(1, B_vect.Size());
     for (int i = 0; i < B_vect.Size(); i++)
@@ -550,12 +561,13 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
 
     Vector x(fespace->GetTrueVSize()); // For defining the linear system, considering Dirichlet's bdc
 
-    // Solver for the linear system
-    CGSolver solver;
-    solver.SetOperator(A);
-    solver.SetRelTol(1e-3);
-    solver.SetMaxIter(100);
-    solver.SetPrintLevel(0);
+    // // Solver for the linear system
+    // CGSolver solver;
+    // solver.SetOperator(A);
+    // solver.SetRelTol(1e-12);
+    // solver.SetMaxIter(10000);
+    // solver.SetPrintLevel(0);
+    UMFPackSolver solver;
 
     // Sockets stream for showing the results using glvis (if visualization is set to true) 
     socketstream sout;
@@ -590,9 +602,22 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
     
     std::string name_test = "./mat.txt";   
     std::ofstream data_file_test(name_test); 
+    std::string name_F = "./F.txt";   
+    std::ofstream data_file_F(name_F); 
+    
+
+
+
+    auto one_over_r = [](const Vector &x){
+        return 1000./(2*M_PI*x[0]);
+    };
+    FunctionCoefficient b2_function(one_over_r);
+    GridFunction B2_Grid(fespace);
+    B2_Grid = 0;
+    B2_Grid.ProjectBdrCoefficient(b2_function, dir_bdr); 
 
     
-    int vis_steps = 10;  // Number of iterations between two visualizations
+    int vis_steps = 1;  // Number of iterations between two visualizations
     // ***************  Time iterations *****************
     for (int step = 0; step < num_steps; step++)
     {   
@@ -628,16 +653,103 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         // RHS = R2Hnm1 + MdBdt = R2* * Hnm1 + M * dBnm1/dt
         rhs = R2Hnm1;
         rhs += MdBdt;
-        
 
         SparseMatrix A_sys;
         Vector X, F;
 
-        // Form linear system taking boundary conditions into account
-        r1.FormLinearSystem(ess_tdof_list, Hn, rhs, A_sys, X, F);
 
-        // Solving Linear system : A_sys * X = B
-        solver.SetOperator(A_sys);
+        Hn.ProjectBdrCoefficient(one,dir_bdr);
+        Array<int> ess_tdof_list_fake;
+        // Form linear system taking boundary conditions into account
+        r1.FormLinearSystem(ess_tdof_list_fake, Hn, rhs, A_sys, X, F);
+        // std::cout << r1.Height() << ", " << A_sys.Height() << std::endl;
+
+        // for (int i = 0; i<F.Size(); i++) {
+        //     data_file_test << F(i) << ", "  << i << std::endl;
+        // }
+
+        for (int i = 0; i<ess_tdof_list.Size(); i++){
+            F(ess_tdof_list[i]) = 0;
+            // A_sys.EliminateRowColDiag(ess_tdof_list[i],1.);
+        }
+        if (iter > 10) {
+            for (int i = 0; i<ess_tdof_list_2.Size(); i++){
+                // F(ess_tdof_list[i]) = 0;
+                A_sys.EliminateRowColDiag(ess_tdof_list_2[i],1.);
+            }
+        }
+        
+        // A_sys.PrintMatlab(data_file_test);
+        // A_sys.PrintMatlab(std::cout);
+
+
+        int n = A_sys.Height();
+
+        SparseMatrix A_final(n+2, n+2);
+
+        const int* I = A_sys.GetI();
+        const int* J = A_sys.GetJ();
+        const double* Data = A_sys.GetData();
+
+        for (int i = 0; i < n; i++)
+        {
+            int row_start = I[i];
+            int row_end   = I[i + 1];
+
+            for (int j = row_start; j < row_end; j++)
+            {
+                int col = J[j];
+                double val = Data[j];
+                A_final.Add(i, col, val);
+            }
+        }
+
+        Vector F2(n+2);
+        Vector X2(n+2);
+
+        for (int i = 0; i<n; i++) {
+            // A_final.Add(i, n, B_vect(i));
+            A_final.Add(n, i, B_vect(i));
+            A_final.Add(i, n, B2_Grid(i));
+            // A_final.Add(n+1, i, B_vect2(i));
+            F2(i) = F(i);
+        }
+        A_final.Add(n,n+1,-1);
+        A_final.Add(n+1,n+1,1);
+        A_final.Finalize();
+        F2(n) = 0;
+        // F2(n) = 0;
+        F2(n+1) = phiH_n;
+        // F2(n+1) = 1e4 * flux_func(t);
+
+        solver.SetOperator(A_final);
+
+        for (int i = 0; i<n+2; i++){
+            // std::cout << X(i)
+            data_file_F << F2(i) << std::endl;
+        }
+        // A_final.PrintMatlab(data_file_test);
+        // A_final.PrintMatlab(std::cout);
+
+        // std::cout << "Size F2 : " << F2.Size() << std::endl;
+        // std::cout << "Size A_final : " << A_final.Size() << std::endl;
+        solver.Mult(F2,X2);
+
+
+
+        for (int i = 0; i<n; i++){
+            // std::cout << X(i)
+            X(i) = X2(i);
+            // std::cout << X(i) << std::endl;
+        }
+        r1.RecoverFEMSolution(X, rhs, Hn);
+        real_t NI = X2(n);
+        
+        
+       
+        // break;
+
+        // break;
         // M.PrintMatlab(std::cout);
         // std::cout << "Number of DOFs: " << fespace->GetVSize() << std::endl;
         // std::cout << "ess_tdof_list : " << ess_tdof_list.Size() << std::endl;
@@ -646,45 +758,35 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         // std::cout << "Size of b : " << Bmat_T.Size() << std::endl;
         // std::cout << "Phi = " << phiH_n;
         // std::cout << "Ts = " << Ts << std::endl;
-        // solver.Mult(F, X);
-        // // Get solution into Hn
+
+
         
 
-        // std::cout << "test" << std::endl;
-
-        // std::cout << "Taille de A : " << A_sys.NumRows() << ", " << A_sys.NumCols() <<  std::endl;
-        // for (int i = 0; i<F.Size(); i++) {
-        //     data_file_test << F(i) << " ";
-        // }
-        // data_file_test.close();
 
         // DSmoother *jacobi = new DSmoother(); // Diagonal smoother
         // jacobi->SetOperator(A_sys);
 
-        for (int i = 0; i<Bmat_T2.Height(); i++) {
-            data_file_test << B_vect(i) << ", " <<  B_vect2(i) << std::endl;;
-        }
-    
-        SchurConstrainedSolver augmented_solver(A_sys, Bmat_T2, solver);
-        augmented_solver.SetRelTol(1e-15);
-        augmented_solver.SetMaxIter(10000);
-        Vector r(1);
-        r(0) = phiH_n;
-        Vector r2(2);
-        r2(0) = phiH_n;
-        r2(1) = 0;
-        augmented_solver.SetOperator(A_sys);
-        augmented_solver.SetConstraintRHS(r2);
-        // std::cout << "test34" << std::endl;
-        M.PrintMatlab(data_file_test);
-        augmented_solver.Mult(F, X);
 
-        data_file_test.close();
-        // std::cout << "test2" << std::endl;
-        r1.RecoverFEMSolution(X, rhs, Hn);
-        Vector Lambda(2);
-        augmented_solver.GetMultiplierSolution(Lambda);
-        real_t NI = Lambda(2);
+        // SchurConstrainedSolver augmented_solver(A_sys, Bmat_T2, solver);
+        // augmented_solver.SetRelTol(1e-15);
+        // augmented_solver.SetMaxIter(10000);
+        // Vector r(1);
+        // r(0) = phiH_n;
+        // Vector r2(2);
+        // r2(0) = phiH_n;
+        // r2(1) = 0;
+        // augmented_solver.SetOperator(A_sys);
+        // augmented_solver.SetConstraintRHS(r);
+        // // std::cout << "test34" << std::endl;
+        // // M.PrintMatlab(data_file_test);
+        // augmented_solver.Mult(F, X);
+
+        // data_file_test.close();
+        // // std::cout << "test2" << std::endl;
+        // r1.RecoverFEMSolution(X, rhs, Hn);
+        // Vector Lambda(2);
+        // augmented_solver.GetMultiplierSolution(Lambda);
+        // real_t NI = Lambda(2);
        
         // *** Update of GridFunctions from solution Hn ***
 
@@ -789,7 +891,7 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
                 // std::cin.get(); // Décommenter pour pause manuelle
             }
         }
-        
+        // std::cin.get();
     }
     data_file.close();
 

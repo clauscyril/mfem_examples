@@ -8,13 +8,13 @@ path = os.path.dirname(os.path.abspath(__file__))
 path = os.path.join(path, "build", "data", "TD_flux_1.csv")
 
 data = pd.read_csv(path, sep=";")
-t = data["t"]
-p_eddy = data["p_eddy"]/1000
-flux = data["flux"]
-phi = data['phi_imposed']
-fluxH = data["fluxH"]
-phiH = data['phiH_imposed']
-NI = data['NI']
+t = data["t"][:15]
+p_eddy = data["p_eddy"][:15]
+flux = data["flux"][:15]
+phi = data['phi_imposed'][:15]
+fluxH = data["fluxH"][:15]
+phiH = data['phiH_imposed'][:15]
+NI = data['NI'][:15]
 
 # p_eddy = np.array(p_eddy[500:])
 
@@ -39,4 +39,6 @@ plt.legend()
 plt.grid()
 plt.figure()
 plt.plot(t, NI)
+plt.figure()
+plt.plot(t, p_eddy)
 plt.show()

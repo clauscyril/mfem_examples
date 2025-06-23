@@ -12,6 +12,8 @@ int main() {
 
     Mesh *mesh = new Mesh(path, 1, 1); 
     mesh->UniformRefinement();
+    // mesh->UniformRefinement();
+    // mesh->UniformRefinement();
 
     Ferrite N30("N30", 5.98e-2, 4.44e-1, 2.48e-6, 4300);
     Ferrite N87("N87", 4.24e-2, 1.48e-1, 2.68e-6, 2200);
@@ -26,7 +28,7 @@ int main() {
     real_t f = 500e3;
     real_t I_rms = 0.082/sqrt(2);
     int nb_period = 5;
-    int nb_iter = 1000 * nb_period;
+    int nb_iter = 100 * nb_period;
     real_t Ts = nb_period/f/nb_iter;
 
     real_t t_f = nb_period/f;
@@ -51,15 +53,15 @@ int main() {
     real_t C2 = Ts*mu/(Ts+2*tau);
     real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
 
-    std::cout << "A1 = " << A1 << std::endl;
-    std::cout << "A2 = " << A2 << std::endl;
-    std::cout << "A3 = " << A3 << std::endl;
-    std::cout << "B1 = " << B1 << std::endl;
-    std::cout << "B2 = " << B2 << std::endl;
-    std::cout << "B3 = " << B3 << std::endl;
-    std::cout << "C1 = " << C1 << std::endl;
-    std::cout << "C2 = " << C2 << std::endl;
-    std::cout << "C3 = " << C3 << std::endl;
+    // std::cout << "A1 = " << A1 << std::endl;
+    // std::cout << "A2 = " << A2 << std::endl;
+    // std::cout << "A3 = " << A3 << std::endl;
+    // std::cout << "B1 = " << B1 << std::endl;
+    // std::cout << "B2 = " << B2 << std::endl;
+    // std::cout << "B3 = " << B3 << std::endl;
+    // std::cout << "C1 = " << C1 << std::endl;
+    // std::cout << "C2 = " << C2 << std::endl;
+    // std::cout << "C3 = " << C3 << std::endl;
     // 
     auto NI_sine_func = [&](real_t t) 
     {
