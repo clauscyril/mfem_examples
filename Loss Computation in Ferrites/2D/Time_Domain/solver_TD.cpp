@@ -397,6 +397,9 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
     real_t C2 = Ts*mu/(Ts+2*tau);
     real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
 
+    real_t D1 = Ts*mu/(Ts + tau);
+    real_t D3 = tau/(Ts+tau);
+
     real_t NI = 0; // For now, initialized to 0;
 
     // // Function used for the integration because of the cylindrical coordinates
@@ -410,7 +413,7 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         return (real_t)1./pow(x[0],2);
     };
     
-    int order = 2;                      // elements order : 1
+    int order = 1;                      // elements order : 1
     int dim = mesh->Dimension();        // Mesh dimension : 2
 
     FiniteElementCollection *fec = new H1_FECollection(order, dim); 
@@ -460,12 +463,8 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
     dir_bdr = 1; // No boundary conditions
     Array<int> dir_bdr_2(mesh->bdr_attributes.Max());
     dir_bdr_2 = 0;
-    dir_bdr_2[1] = 1; // No boundary conditions
-    dir_bdr_2[2] = 1; // No boundary conditions
-    dir_bdr_2[3] = 1; // No boundary conditions
-    dir_bdr_2[0] = 1; // No boundary conditions
     fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
-    fespace->GetEssentialTrueDofs(dir_bdr_2, ess_tdof_list_2);
+
     // fespace->GetBoundaryTrueDofs(ess_tdof_list);
 
     // **** Coefficients for bilinear forms ****
@@ -540,33 +539,16 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
 
     // std::cout << B_vect.Size() << " , " << B_vect2.Size() << std::endl; 
 
-    DenseMatrix Bmat_T(1, B_vect.Size());
-    for (int i = 0; i < B_vect.Size(); i++)
-        Bmat_T(0, i) = B_vect(i);
-
-    DenseMatrix Bmat_T2(2, B_vect2.Size());
-    for (int i = 0; i < B_vect.Size(); i++)
-    {   
-        Bmat_T2(0, i) = B_vect(i);
-        Bmat_T2(1, i) = B_vect2(i);
-    }
-
     // Parameters for the linear system
     SparseMatrix &A = r1.SpMat();
     SparseMatrix &R2 = r2.SpMat();
     SparseMatrix &M = m.SpMat();
+
     Vector rhs(fespace->GetTrueVSize());
     Vector R2Hnm1(fespace->GetTrueVSize());
     Vector MdBdt(fespace->GetTrueVSize());
 
     Vector x(fespace->GetTrueVSize()); // For defining the linear system, considering Dirichlet's bdc
-
-    // // Solver for the linear system
-    // CGSolver solver;
-    // solver.SetOperator(A);
-    // solver.SetRelTol(1e-12);
-    // solver.SetMaxIter(10000);
-    // solver.SetPrintLevel(0);
     UMFPackSolver solver;
 
     // Sockets stream for showing the results using glvis (if visualization is set to true) 
@@ -606,10 +588,9 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
     std::ofstream data_file_F(name_F); 
     
 
-
-
+    // **** Fonction multipliée par NI
     auto one_over_r = [](const Vector &x){
-        return 1000./(2*M_PI*x[0]);
+        return -1./(2*M_PI*x[0]);
     };
     FunctionCoefficient b2_function(one_over_r);
     GridFunction B2_Grid(fespace);
@@ -627,22 +608,23 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         t += Ts;                    // New time 
 
 
-        // phi_n = flux_func(t);
-        // phiH_n = 1/C1*(phi_n - C2*phiH_nm1 - C3*phi_nm1);
-        // phiH_nm1 = phiH_n;
-        // phi_nm1 = phi_n; 
-
-        phiH_n = flux_func(t);
-        phi_n = C1*phiH_n + C2*phiH_nm1 + C3*phi_nm1;
+        phi_n = flux_func(t);
+        // phiH_n = 1/C1*(phi_n - C2 * phiH_nm1 - C3*phi_nm1);
+        phiH_n = 1/D1 * (phi_n - D3 * phi_nm1);
         phiH_nm1 = phiH_n;
         phi_nm1 = phi_n; 
+
+        // phiH_n = flux_func(t);
+        // phi_n = C1*phiH_n + C2*phiH_nm1 + C3*phi_nm1;
+        // phiH_nm1 = phiH_n;
+        // phi_nm1 = phi_n; 
 
         // std::cout << "Phi = " << phi_n << std::endl;
         // std::cout << "B1 = " << B1 << std::endl;
         // std::cout << "B2 = " << B2 << std::endl;
         // std::cout << "B3 = " << B3 << std::endl;
 
-
+        
 
         // Mult M * dBdt → MdBdt
         m.Mult(db_dtm1, MdBdt);
@@ -654,42 +636,25 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         rhs = R2Hnm1;
         rhs += MdBdt;
 
+        int n = A.Height();
         SparseMatrix A_sys;
-        Vector X, F;
+        Vector X(n);
+        Vector F(n);
+        F = rhs;
 
-
-        Hn.ProjectBdrCoefficient(one,dir_bdr);
-        Array<int> ess_tdof_list_fake;
-        // Form linear system taking boundary conditions into account
-        r1.FormLinearSystem(ess_tdof_list_fake, Hn, rhs, A_sys, X, F);
-        // std::cout << r1.Height() << ", " << A_sys.Height() << std::endl;
-
-        // for (int i = 0; i<F.Size(); i++) {
-        //     data_file_test << F(i) << ", "  << i << std::endl;
-        // }
-
+        // **** TEST Avec FormLinearSystem
         for (int i = 0; i<ess_tdof_list.Size(); i++){
             F(ess_tdof_list[i]) = 0;
+            A.EliminateRow(ess_tdof_list[i], SparseMatrix::DIAG_ONE);
             // A_sys.EliminateRowColDiag(ess_tdof_list[i],1.);
         }
-        if (iter > 10) {
-            for (int i = 0; i<ess_tdof_list_2.Size(); i++){
-                // F(ess_tdof_list[i]) = 0;
-                A_sys.EliminateRowColDiag(ess_tdof_list_2[i],1.);
-            }
-        }
-        
-        // A_sys.PrintMatlab(data_file_test);
-        // A_sys.PrintMatlab(std::cout);
 
-
-        int n = A_sys.Height();
 
         SparseMatrix A_final(n+2, n+2);
 
-        const int* I = A_sys.GetI();
-        const int* J = A_sys.GetJ();
-        const double* Data = A_sys.GetData();
+        const int* I = A.GetI();
+        const int* J = A.GetJ();
+        const double* Data = A.GetData();
 
         for (int i = 0; i < n; i++)
         {
@@ -718,51 +683,24 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         A_final.Add(n+1,n+1,1);
         A_final.Finalize();
         F2(n) = 0;
-        // F2(n) = 0;
         F2(n+1) = phiH_n;
-        // F2(n+1) = 1e4 * flux_func(t);
+
 
         solver.SetOperator(A_final);
-
-        for (int i = 0; i<n+2; i++){
-            // std::cout << X(i)
-            data_file_F << F2(i) << std::endl;
-        }
-        // A_final.PrintMatlab(data_file_test);
-        // A_final.PrintMatlab(std::cout);
-
-        // std::cout << "Size F2 : " << F2.Size() << std::endl;
-        // std::cout << "Size A_final : " << A_final.Size() << std::endl;
         solver.Mult(F2,X2);
 
 
-
+        std::cout << "NI/2/PI/RI = " << X2(n)/2/M_PI/Ri << std::endl;
         for (int i = 0; i<n; i++){
             // std::cout << X(i)
             X(i) = X2(i);
-            // std::cout << X(i) << std::endl;
+            Hn(i) = X(i);
+            // std::cout << "dof : "<< i << " : " <<  X(i) << std::endl;
         }
-        r1.RecoverFEMSolution(X, rhs, Hn);
-        real_t NI = X2(n);
+        // r1.RecoverFEMSolution(X, rhs, Hn);
+        real_t NI = +X2(n);
         
         
-       
-        // break;
-
-        // break;
-        // M.PrintMatlab(std::cout);
-        // std::cout << "Number of DOFs: " << fespace->GetVSize() << std::endl;
-        // std::cout << "ess_tdof_list : " << ess_tdof_list.Size() << std::endl;
-        // std::cout << "Size of F : " << F.Size() << std::endl;
-        // std::cout << "Size of X : " << X.Size() << std::endl;
-        // std::cout << "Size of b : " << Bmat_T.Size() << std::endl;
-        // std::cout << "Phi = " << phiH_n;
-        // std::cout << "Ts = " << Ts << std::endl;
-
-
-        
-
-
         // DSmoother *jacobi = new DSmoother(); // Diagonal smoother
         // jacobi->SetOperator(A_sys);
 
@@ -781,12 +719,7 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         // // M.PrintMatlab(data_file_test);
         // augmented_solver.Mult(F, X);
 
-        // data_file_test.close();
-        // // std::cout << "test2" << std::endl;
-        // r1.RecoverFEMSolution(X, rhs, Hn);
-        // Vector Lambda(2);
-        // augmented_solver.GetMultiplierSolution(Lambda);
-        // real_t NI = Lambda(2);
+
        
         // *** Update of GridFunctions from solution Hn ***
 

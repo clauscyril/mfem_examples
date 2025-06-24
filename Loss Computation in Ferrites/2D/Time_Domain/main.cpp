@@ -28,7 +28,7 @@ int main() {
     real_t f = 500e3;
     real_t I_rms = 0.082/sqrt(2);
     int nb_period = 5;
-    int nb_iter = 100 * nb_period;
+    int nb_iter = 1000 * nb_period;
     real_t Ts = nb_period/f/nb_iter;
 
     real_t t_f = nb_period/f;
@@ -159,8 +159,19 @@ int main() {
             return phi_peak* (nb_iter/nb_period - rest) * Ts;
     };
 
+    auto phiH_saw_func = [&](real_t t) 
+    {
+        int iter = int(t/Ts);
+        int rest = iter%((int)(nb_iter/nb_period));
+
+        if (rest < nb_iter/nb_period/2)
+            return 7.7805e-5 * rest * Ts;
+        else
+            return 7.7805e-5* (nb_iter/nb_period - rest) * Ts;
+    };
+
     // TD_sim(mesh, NI_sine_func, t_f, nb_iter, N30, false);
-    TD_sim_by_flux(mesh, phiH_sine_func, t_f, nb_iter, N30, true);
+    TD_sim_by_flux(mesh, phi_saw_func, t_f, nb_iter, N30, false);
 
     // *********** TEST ***********
     // real_t phi_n = 0;
