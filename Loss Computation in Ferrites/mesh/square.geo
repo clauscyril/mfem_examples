@@ -11,5 +11,6 @@ Physical Line("Gauche", 4) = {4};
 
 Physical Surface("Domaine", 10) = {1};
 
+ Mesh.ElementOrder = 2;
 // Paramètre de maillage
 Mesh.CharacteristicLengthMax = 1;

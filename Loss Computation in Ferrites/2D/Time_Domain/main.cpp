@@ -11,7 +11,7 @@ int main() {
     const char *path = "../../../mesh/square.msh";
 
     Mesh *mesh = new Mesh(path, 1, 1); 
-    mesh->UniformRefinement();
+    // mesh->UniformRefinement();
     // mesh->UniformRefinement();
     // mesh->UniformRefinement();
 
@@ -25,9 +25,9 @@ int main() {
     real_t phi_peak = b_peak*w*height;
     
     // real_t I_rms = 0.082348/sqrt(2);
-    real_t f = 500e3;
+    real_t f = 400e3;
     real_t I_rms = 0.082/sqrt(2);
-    int nb_period = 5;
+    int nb_period = 4;
     int nb_iter = 1000 * nb_period;
     real_t Ts = nb_period/f/nb_iter;
 
@@ -150,13 +150,14 @@ int main() {
 
     auto phi_saw_func = [&](real_t t) 
     {
-        int iter = int(t/Ts);
+        int iter = int((t + 0.25/f)/Ts);
         int rest = iter%((int)(nb_iter/nb_period));
 
         if (rest < nb_iter/nb_period/2)
-            return phi_peak * rest * Ts;
+            return 2 * phi_peak * rest/(nb_iter/nb_period/2) - phi_peak;
         else
-            return phi_peak* (nb_iter/nb_period - rest) * Ts;
+            // return 2* phi_peak* (nb_iter/nb_period - rest/nb_iter*nb_period) * Ts - phi_peak;
+            return - 2 * phi_peak * rest/(nb_iter/nb_period/2) + 3*phi_peak;
     };
 
     auto phiH_saw_func = [&](real_t t) 
@@ -171,27 +172,9 @@ int main() {
     };
 
     // TD_sim(mesh, NI_sine_func, t_f, nb_iter, N30, false);
-    TD_sim_by_flux(mesh, phi_saw_func, t_f, nb_iter, N30, false);
+    TD_sim_by_flux(mesh, phi_saw_func, t_f, nb_iter, N87, true);
 
-    // *********** TEST ***********
-    // real_t phi_n = 0;
-    // real_t phi_nm1 = 0;
-    // real_t phiH_n = 0;
-    // real_t phiH_nm1 = 0;
 
-    // real_t t = 0;
-    // std::string name_test = "./test.csv";   
-    // std::ofstream data_file_test(name_test);
-    // data_file_test << "t;phi;phiH" << std::endl;
-    // for (int step = 0; step < nb_iter; step++)
-    // {   
-    //     t += Ts;
-    //     phi_n = phi_sine_func(t);
-    //     phiH_n = 1/C1*(phi_n - C2*phiH_nm1 - C3*phi_nm1);
-    //     phiH_nm1 = phiH_n;
-    //     phi_nm1 = phi_n;
-    //     data_file_test << t << ";" << phi_n  << ";" << phiH_n << std::endl; 
-    // }
     return 0;
 }
 
