@@ -228,7 +228,7 @@ void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
         // Mult R2 * Hnm1 → R2Hnm1
         r2.Mult(Hnm1, R2Hnm1);
 
-        // RHS = R2Hnm1 + MdBdt = R2* * Hnm1 + M * dBnm1/dt
+        // RHS = R2Hnm1 + MdBdt = R2 * Hnm1 + M * dBnm1/dt
         rhs = R2Hnm1;
         rhs += MdBdt;
         
@@ -648,7 +648,6 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
             A.EliminateRow(ess_tdof_list[i], SparseMatrix::DIAG_ONE);
             // A_sys.EliminateRowColDiag(ess_tdof_list[i],1.);
         }
-
 
         SparseMatrix A_final(n+2, n+2);
 

@@ -33,36 +33,10 @@ int main() {
 
     real_t t_f = nb_period/f;
 
-    Ferrite ferrite = N30;
+    // Ferrite ferrite = N30;
     real_t tau = 1/(2*M_PI*1.8e6);
 
-    real_t rho = ferrite.rho;
-    real_t sigma = ferrite.sigma;
-    real_t eps = ferrite.eps;
-    real_t mu = ferrite.mu; 
 
-    real_t A1 = (rho * (sigma * Ts + 2*eps) + Ts)/(2*eps + Ts*sigma);
-    real_t A2 = (rho * (sigma * Ts - 2*eps) + Ts)/(2*eps + Ts*sigma);
-    real_t A3 = -(Ts*sigma -2*eps) / (2*eps + Ts*sigma);
-
-    real_t B1 = 2*mu / (Ts + 2*tau);
-    real_t B2 = -(2*mu) / (Ts + 2*tau);
-    real_t B3 = -(Ts - 2*tau) / (Ts + 2*tau);
-
-    real_t C1 = Ts*mu/(Ts+2*tau);
-    real_t C2 = Ts*mu/(Ts+2*tau);
-    real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
-
-    // std::cout << "A1 = " << A1 << std::endl;
-    // std::cout << "A2 = " << A2 << std::endl;
-    // std::cout << "A3 = " << A3 << std::endl;
-    // std::cout << "B1 = " << B1 << std::endl;
-    // std::cout << "B2 = " << B2 << std::endl;
-    // std::cout << "B3 = " << B3 << std::endl;
-    // std::cout << "C1 = " << C1 << std::endl;
-    // std::cout << "C2 = " << C2 << std::endl;
-    // std::cout << "C3 = " << C3 << std::endl;
-    // 
     auto NI_sine_func = [&](real_t t) 
     {
         return I_rms * std::sqrt(2) * std::sin(2 * M_PI * f * t);
@@ -126,16 +100,6 @@ int main() {
         return 7.7805e-5 * std::sin(2 * M_PI * f * t);
     };
 
-
-
-    std::complex<real_t> j(0,1);
-    real_t omega = 2*M_PI*f;           // Working frequency
-    const std::complex<real_t> mu_eq = mu / ((real_t)1. + tau * j * omega);
-    real_t phase = std::abs(mu_eq);
-    auto phi_sine_func_phased = [&](real_t t) 
-    {
-        return phi_peak * std::sin(2 * M_PI * f * t - phase);
-    };
 
     auto phi_square_func = [&](real_t t) 
     {

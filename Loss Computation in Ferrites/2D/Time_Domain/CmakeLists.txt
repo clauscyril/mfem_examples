@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD 17)
 # list(APPEND CMAKE_PREFIX_PATH "C:/msys64/ucrt64")
 # find_package(Ginkgo REQUIRED)
 
-set(MFEM_DIR, "C:/Program Files (x86)/mfem/lib/cmake/mfem")
+# set(MFEM_DIR, "C:/Program Files (x86)/mfem/lib/cmake/mfem")
 # find_package(MFEM REQUIRED CONFIG)
 find_package(MFEM REQUIRED)
 
@@ -27,5 +27,6 @@ find_package(MFEM REQUIRED)
 
 add_executable(main main.cpp ../source/customcurl.cpp solver_TD.cpp)
 
+message(${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(main mfem)

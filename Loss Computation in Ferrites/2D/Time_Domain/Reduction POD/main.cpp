@@ -39,7 +39,9 @@ int main(int argc, char *argv[])
         return I_rms * std::sqrt(2) * std::sin(2 * M_PI * f * t);
     };
 
-    TD_sim(mesh, NI_sine_func, t_f, nb_iter, N30, false);
+    // TD_sim_offline(mesh, NI_sine_func, t_f, nb_iter, N30, false);
+    // std::cout << "test" << std::endl;
+    TD_sim_online(mesh, NI_sine_func, t_f, nb_iter, N30, true);
 
     return 0;
 }

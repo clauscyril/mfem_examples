@@ -4,6 +4,7 @@
 #include "mfem/Utilities.hpp"
 #include <iostream>
 #include <cmath>
+#include <unordered_set>
 
 using namespace mfem;
 
@@ -11,7 +12,7 @@ using namespace mfem;
 #define M_PI 3.14159265358979323846 
 #endif
 
-void TD_sim(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
+void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
 
     // ****************** Parameters definitions *********************
     real_t Ts = t_f/(num_steps);
@@ -125,24 +126,28 @@ void TD_sim(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
     dir_bdr = 1; // All the borders have boundary conditions
     fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
 
-    // // // 9. Initiate ROM related variables
-    // int max_num_snapshots = 100;
-    // bool update_right_SV = false;
-    // bool isIncremental = false;
-    // const std::string basisName = "basis";
-    // const std::string basisFileName = basisName + std::to_string(id);
-    // // std::unique_ptr<const CAROM::Matrix> spatialbasis;
-    // CAROM::Options* options;
-    // CAROM::BasisGenerator *generator;
-    // // int numRowRB, numColumnRB;
-    // // StopWatch solveTimer, assembleTimer, mergeTimer;
-    // int numRowRB = fespace->GetTrueVSize();  // Taille de la solution Hn
-    // options = new CAROM::Options(numRowRB,
-    //                             max_num_snapshots,  // max snapshots
-    //                             update_right_SV,    // update right singular vectors
-    //                             isIncremental);     // use incremental SVD
+    std::unordered_set<int> ess_tdof_set;
+    for (int i =0; i<ess_tdof_list.Size(); i++) {
+        ess_tdof_set.insert(ess_tdof_list[i]);
+    }
+    std::cout << "Set size : " <<  ess_tdof_set.size() << std::endl;
+    std::cout << "list size : " <<  ess_tdof_list.Size() << std::endl;
+    
+    // std::cout << (ess_tdof_set.find(ess_tdof_list[10]) != ess_tdof_set.end()) << std::endl;
+    // std::cout << (ess_tdof_set.find(100000) != ess_tdof_set.end()) << std::endl;
+    // std::cout << *ess_tdof_set.find(ess_tdof_list[10]) << std::endl;
 
-    // generator = new CAROM::BasisGenerator(*options, isIncremental, basisFileName);
+    int newSize = Hn.Size() - ess_tdof_set.size();
+    unordered_map<int, int> map;
+    Vector TrueHn(newSize);
+    int j = 0;
+    for (int i = 0; i<Hn.Size(); i++) {
+        if (ess_tdof_set.find(i) == ess_tdof_set.end()) {
+            map.insert(std::make_pair(j,i));
+            j++;
+        }
+    }
+    std::cout << map.size() << std::endl;
 
 
     FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
@@ -203,11 +208,8 @@ void TD_sim(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
     Vector x(fespace->GetTrueVSize()); // For defining the linear system, considering Dirichlet's bdc
 
     // Solver for the linear system
-    CGSolver solver;
+    UMFPackSolver solver;
     solver.SetOperator(A);
-    solver.SetRelTol(1e-12);
-    solver.SetMaxIter(5000);
-    solver.SetPrintLevel(0);
 
     // Sockets stream for showing the results using glvis (if visualization is set to true) 
     socketstream sout;
@@ -243,6 +245,23 @@ void TD_sim(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
     data_file << "t;p_eddy;flux;NI\n0;0;0\n";  // Intialising the file with coluns names and first values to 0
 
 
+    int max_num_snapshots = 100;
+    bool update_right_SV = false;
+    bool isIncremental = false;
+    const std::string basisName = "data/basis";
+    const std::string basisFileName = basisName + std::to_string(id);
+    std::unique_ptr<const CAROM::Matrix> spatialbasis;
+    CAROM::Options* options;
+    CAROM::BasisGenerator *generator;
+    int numRowRB, numColumnRB;
+    StopWatch solveTimer, assembleTimer, mergeTimer;
+
+    // options = new CAROM::Options(newSize, max_num_snapshots, update_right_SV);
+    options = new CAROM::Options(fespace->GetTrueVSize(), max_num_snapshots, update_right_SV);
+
+    generator = new CAROM::BasisGenerator(*options, isIncremental, basisFileName);
+
+
     int vis_steps = 10;  // Number of iterations between two visualizations
     // ***************  Time iterations *****************
     for (int step = 0; step < num_steps; step++)
@@ -275,7 +294,6 @@ void TD_sim(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
         solver.Mult(B, X);
         // Get solution into Hn
         r1.RecoverFEMSolution(X, rhs, Hn);
-
 
 
 
@@ -362,14 +380,22 @@ void TD_sim(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
 
         // Visualisation avec GLVis
         if (step % vis_steps == 0 )
-        {
+        {   
             std::cout << "Time step: " << step << ", Time: " << t << std::endl;
+
+            // Snapshot generation by removing border elements (Dirichlet Bondary conditions)
+            for (int i = 0; i<newSize; i++){
+                TrueHn(i) = Hn(map[i]);
+            }
+            bool addSample = generator->takeSample(Hn.GetData());
+            
+
 
             if (visualization)
             {
                 sout.precision(8);
                 sout << "solution\n"
-                     << mesh << Hn
+                     << pmesh << Hn
                      << "window_title 'Champ H'"
                      << std::flush;
                 sout_e << "solution\n" << pmesh << En <<  "window_title 'Champ E'" << std::flush;
@@ -381,14 +407,350 @@ void TD_sim(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
         }
         
     }
-
-    // generator->writeSnapshot();
+    generator->writeSnapshot();
+    generator->endSamples();
+    delete generator;
+    delete options;
     data_file.close();
-    std::cout << "Ceci est un test : ";
-    std::cout << num_procs << std::endl;
     Mpi::Finalize();
 
 }
+
+void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
+
+
+
+     real_t Ts = t_f/(num_steps);
+
+    // geometric parameters
+    real_t Ri = 9.6e-3/2.0;
+    real_t height = 7.59e-3;
+    real_t w = 5.3e-3;
+    real_t Rout = Ri + w;
+    real_t Rm = (Rout - Ri) / 2;
+    int iter = 0;
+
+    // ****** Ferrite parameters ******
+    real_t rho = ferrite.rho;
+    real_t sigma = ferrite.sigma;
+    real_t eps = ferrite.eps;
+    real_t mu = ferrite.mu; 
+    
+    real_t tau = 1/(2 * M_PI * 1.8e6);
+
+    // int num_steps = 1000;
+    real_t t = 0.0;
+
+    real_t A1 = (rho * (sigma * Ts + 2*eps) + Ts)/(2*eps + Ts*sigma);
+    real_t A2 = (rho * (sigma * Ts - 2*eps) + Ts)/(2*eps + Ts*sigma);
+    real_t A3 = -(Ts*sigma -2*eps) / (2*eps + Ts*sigma);
+
+    real_t B1 = 2*mu / (Ts + 2*tau);
+    real_t B2 = -(2*mu) / (Ts + 2*tau);
+    real_t B3 = -(Ts - 2*tau) / (Ts + 2*tau);
+
+    real_t C1 = Ts*mu/(Ts+2*tau);
+    real_t C2 = Ts*mu/(Ts+2*tau);
+    real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
+
+    real_t NI = 0; // For now, initialized to 0;
+
+
+    int order = 2;                      // elements order : 2
+    int dim = mesh.Dimension();        // Mesh dimension : 2
+    int id = 0;
+
+    Mpi::Init();
+    int num_procs = Mpi::WorldSize();
+    int myid = Mpi::WorldRank();
+    Hypre::Init();
+
+
+    ParMesh pmesh(MPI_COMM_WORLD, mesh);
+    mesh.Clear();
+
+    // Boundary conditions function
+    auto bdr_func = [&](const Vector &x, real_t t) -> real_t
+    {
+        real_t r = x(0); // Accès au premier élément du vecteur x
+        return NI_func(t) / (2 * M_PI * r);
+    };
+
+    // // Function used for the integration because of the cylindrical coordinates
+    auto r_coeff_func = [](const Vector &x){
+        return x[0];
+    };
+
+
+    // Function for the correcting factor rho/r² 
+    auto inv_r_square_func = [](const Vector &x){
+        return (real_t)1./pow(x[0],2);
+    };
+    
+
+
+    FiniteElementCollection *fec = new H1_FECollection(order, dim); 
+    ParFiniteElementSpace *fespace = new ParFiniteElementSpace(&pmesh, fec);
+    ParFiniteElementSpace *fespace_E = new ParFiniteElementSpace(&pmesh, fec, dim);
+
+    HYPRE_Int size = fespace->GlobalTrueVSize();
+
+    ParGridFunction Hn(fespace);     // H^n
+    ParGridFunction HnD(fespace);     // H^n
+    ParGridFunction Hnm1(fespace);   // H^{n-1}
+    ParGridFunction db_dt(fespace);
+    ParGridFunction db_dtm1(fespace);
+
+
+
+    // Initializing all values to 0
+    Hn = 0;
+    HnD = 0;
+
+    Hnm1 = 0;  
+    db_dt = 0;
+
+    // Definition of the Boundary conditions  :
+    Array<int> ess_tdof_list;
+    Array<int> dir_bdr(pmesh.bdr_attributes.Max());
+    dir_bdr = 1; // All the borders have boundary conditions
+    fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
+
+
+    FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
+    Hnm1.ProjectBdrCoefficient(bdr_coeff, dir_bdr);
+
+    // **** Coefficients for bilinear forms ****
+    FunctionCoefficient r_coeff(r_coeff_func);
+    FunctionCoefficient inv_r_square_coeff(inv_r_square_func);
+
+    ConstantCoefficient A1_coeff(A1);
+    ProductCoefficient A1_r(A1_coeff, r_coeff);
+
+    ConstantCoefficient B1_coeff(B1);
+    ProductCoefficient B1_r(B1_coeff, r_coeff);
+
+    ProductCoefficient A1_r_inv(A1_r, inv_r_square_coeff);
+
+
+    ConstantCoefficient A2_coeff(-A2);
+    ProductCoefficient A2_r(A2_coeff, r_coeff);
+
+    ConstantCoefficient B2_coeff(-B2);
+    ProductCoefficient B2_r(B2_coeff, r_coeff);
+
+    ProductCoefficient A2_r_inv(A2_r, inv_r_square_coeff);
+
+    ConstantCoefficient k(-(B3-A3));
+    ProductCoefficient k_r(k, r_coeff);
+    // **************************************************
+
+    // ******* Definition of Bilinear and Linear Forms ********
+    // ParLinearForm *b = new ParLinearForm(fespace);
+    // *b = 0;
+    // b->Assemble();
+    // ParLinearForm *b1 = new ParLinearForm(fespace);
+    // *b1 = 0;
+    // b1->Assemble();
+    // ParLinearForm *b2 = new ParLinearForm(fespace);
+    // *b2 = 0;
+    // b2->Assemble();
+
+    ParBilinearForm r1(fespace); 
+    r1.AddDomainIntegrator(new DiffusionIntegrator(A1_r));
+    r1.AddDomainIntegrator(new MassIntegrator(B1_r));
+    r1.AddDomainIntegrator(new MassIntegrator(A1_r_inv));
+    r1.Assemble();
+
+    ParBilinearForm r2(fespace); 
+    r2.AddDomainIntegrator(new DiffusionIntegrator(A2_r));
+    r2.AddDomainIntegrator(new MassIntegrator(B2_r));
+    r2.AddDomainIntegrator(new MassIntegrator(A2_r_inv));
+    r2.Assemble();
+
+    ParBilinearForm m(fespace);
+    m.AddDomainIntegrator(new MassIntegrator(k_r));
+    m.Assemble();
+
+    r1.Finalize();
+    r2.Finalize();
+    m.Finalize();
+
+    // Parameters for the linear system
+    // SparseMatrix &A = r1.SpMat();
+    // // HypreParMatrix &A = r1.Ma
+    // SparseMatrix &R2 = r2.SpMat();
+    // SparseMatrix &M = m.SpMat();
+    HypreParMatrix A, R2, M;
+    ParLinearForm b(fespace);
+    b = 0;
+    b.Assemble();
+    Vector X, B;
+    
+    Vector rhs(fespace->GetTrueVSize());
+    Vector R2Hnm1(fespace->GetTrueVSize());
+    Vector MdBdt(fespace->GetTrueVSize());
+
+
+    Array<int> ess_tdof_list_fake;
+    // Vector X_fake, B_fake;
+    // r1.FormLinearSystem(ess_tdof_list, Hn, b, A, X, B);  
+    // r2.FormLinearSystem(ess_tdof_list_fake, Hn, b, R2, X_fake, B_fake); // Not applying bc here
+    // m.FormLinearSystem(ess_tdof_list_fake, Hn, b, M, X_fake, B_fake);
+
+    r1.FormSystemMatrix(ess_tdof_list, A); // Applying BC 
+    r2.FormSystemMatrix(ess_tdof_list_fake, R2); // Applying BC
+    m.FormSystemMatrix(ess_tdof_list_fake, M); // Applying BC
+
+
+    int max_num_snapshots = 100;
+    bool update_right_SV = false;
+    bool isIncremental = false;
+    const std::string basisName = "data/basis0";
+    const std::string basisFileName = basisName + std::to_string(id);
+    std::unique_ptr<const CAROM::Matrix> spatialbasis;
+    CAROM::Options* options;
+    CAROM::BasisGenerator *generator;
+    int numRowRB, numColumnRB;
+    StopWatch solveTimer, assembleTimer, mergeTimer;
+
+
+
+    assembleTimer.Start();
+    CAROM::BasisReader reader(basisName);
+    spatialbasis = reader.getSpatialBasis();
+    numRowRB = spatialbasis->numRows();
+    numColumnRB = spatialbasis->numColumns();
+    if (myid == 0) printf("spatial basis dimension is %d x %d\n", numRowRB,
+                                numColumnRB);
+
+    std::cin.get();
+    // libROM stores the matrix row-wise, so wrapping as a DenseMatrix in MFEM means it is transposed.
+    DenseMatrix *reducedBasisT = new DenseMatrix(spatialbasis->getData(),
+            numColumnRB, numRowRB);
+    
+    spatialbasis->print("test1");
+    // 21. form ROM operators
+    CAROM::Matrix ReducedA(numColumnRB, numColumnRB, false);
+    CAROM::Matrix invReducedA(numColumnRB, numColumnRB, false);
+    CAROM::Matrix ReducedR2(numColumnRB, numColumnRB, false);
+    CAROM::Matrix ReducedM(numColumnRB, numColumnRB, false);
+
+    ComputeCtAB(A, *spatialbasis, *spatialbasis, ReducedA);    // Reduced A
+    ComputeCtAB(A, *spatialbasis, *spatialbasis, invReducedA); // inverse of Reduced A 
+    invReducedA.inverse();
+    ComputeCtAB(R2, *spatialbasis, *spatialbasis, ReducedR2); // Reduced R2
+    ComputeCtAB(M, *spatialbasis, *spatialbasis, ReducedM);   // Reduced M
+    invReducedA.print("A_inv");
+    ReducedA.print("A");
+
+    
+    CAROM::Vector B_carom(B.GetData(), B.Size(), true, false);  // B Compatible with libRom
+    CAROM::Vector X_carom(X.GetData(), X.Size(), true, false);  // X Compatible with libRom
+
+    std::unique_ptr<CAROM::Vector> reducedRHS = spatialbasis->transposeMult(B_carom); // Reduced version of B
+
+    CAROM::Vector reducedHn(numColumnRB, false);
+    reducedHn = 0;
+
+    CAROM::Vector reducedHnm1(numColumnRB, false);
+    reducedHnm1 = 0;
+
+    CAROM::Vector reducedBdtn(numColumnRB, false);
+    reducedBdtn = 0;
+
+    assembleTimer.Stop();
+
+    std::cout << "Number of dof : " << fespace->GetNDofs() << std::endl;
+    std::cout << "VSize : " << fespace->GetTrueVSize() << std::endl;
+    std::cin.get();
+ 
+    Vector AHnD;
+
+    socketstream sout;
+
+    char vishost[] = "localhost";
+    int visport = 19916;
+
+    if (visualization)  // Initialize the ploting of the results
+    {
+        sout.open(vishost, visport);
+        sout << "parallel " << num_procs << " " << myid << "\n";
+        sout.precision(8);
+        sout << "solution\n" << pmesh << Hn << "\nkeys j\n" << std::flush;
+
+    }
+
+
+    int vis_steps = 10;  // Number of iterations between two visualizations
+    for (int step = 0; step < num_steps; step++)
+    {   
+        iter++;
+
+        t += Ts;                    // New time 
+        bdr_coeff.SetTime(t);       // Update boundary conditions fonction's time parameters
+        Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr); // Setting new boundary conditions on Hn
+        r1.FormLinearSystem(ess_tdof_list, Hn, rhs, A, X, B);  // On doit Recalculer rhs à la fin de la boucle
+
+        
+
+
+
+        A.Mult(HnD, AHnD);
+        CAROM::Vector HnD_carom(HnD.GetData(), HnD.Size(), true, false);
+        CAROM::Vector AHnD_carom(AHnD.GetData(), AHnD.Size(), true, false);
+        AHnD_carom.print("hnd");
+
+        std::unique_ptr<CAROM::Vector> HnD_reduced = spatialbasis->transposeMult(HnD_carom);
+        std::unique_ptr<CAROM::Vector> reduced_AHnD = spatialbasis->transposeMult(AHnD_carom);
+   
+
+
+        // reducedRHS = reducedR2 * reduced_hnm1 + reducedM * reducedDBdT
+        std::unique_ptr<CAROM::Vector> reduced_R2Hnm1 = ReducedR2.mult(reducedHnm1);
+        std::unique_ptr<CAROM::Vector> reduced_MdBdt = ReducedM.mult(reducedBdtn);
+        *reducedRHS = *reduced_R2Hnm1;
+        *reducedRHS += *reduced_MdBdt;
+        // RHS = RHS - AHnD, takes DBC into consideration
+        solveTimer.Start();
+        invReducedA.mult(*reducedRHS, reducedHn);
+        reducedHn += *HnD_reduced;  // Adding DBC
+        solveTimer.Stop();
+        std::cout << "ROM Computed" << std::endl;
+
+        // Update of db_dt with : (db_dt)_n = B1*Hn + B2*Hn-1 + B3*(db_dt)_n-1
+        reducedBdtn *= B3;
+        reducedHnm1 *= B2;
+        reducedHn *= B1;
+
+        reducedBdtn += reducedHnm1;
+        reducedBdtn += reducedHn;
+
+        reducedHn *= 1/B1;
+        reducedHnm1 = reducedHn;
+                
+        spatialbasis->mult(reducedHn, X_carom);
+        for (int i = 0; i<fespace->GetNE(); i++){
+            Hn(i) = X_carom(i);
+        }
+        if (step % vis_steps == 0 )
+        {       
+            std::cout << "Time step: " << step << ", Time: " << t << std::endl;
+            reducedHn.print("test");
+            X_carom.print("test2");
+            if (visualization)
+            {
+                sout.precision(8);
+                sout << "solution\n"
+                     << pmesh << Hn
+                     << "window_title 'Champ H'"
+                     << std::flush;
+            }
+            std::cin.get();
+        }
+    }
+}
+
 
 
 PowerLossCoefficient_TD::PowerLossCoefficient_TD(const FiniteElementSpace *fespace_, CurlCustomCoefficient &J_, VectorGridFunctionCoefficient &E_)
