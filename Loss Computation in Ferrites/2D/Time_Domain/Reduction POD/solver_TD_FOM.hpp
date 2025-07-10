@@ -4,6 +4,8 @@
 #include "../../headers/customcurl.hpp"
 #include "../../headers/Ferrite.hpp"
 #include <mfem.hpp>
+#include "linalg/BasisGenerator.h"
+#include "linalg/BasisReader.h"
 
 using namespace mfem;
 
@@ -13,10 +15,13 @@ using namespace mfem;
 
 
 
-void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization);
+void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization, bool save_snapshot);
 
 void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization);
 
+void ComputeCurl(const mfem::HypreParMatrix& Mass,
+                           const mfem::HypreParMatrix& Kx,
+                           CAROM::Matrix& C); // Output: dense, local
 
 class PowerLossCoefficient_TD : public mfem::Coefficient
 {

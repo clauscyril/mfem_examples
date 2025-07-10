@@ -25,9 +25,12 @@ int main(int argc, char *argv[])
     const char *mesh_file = "../../../../mesh/square.msh";
 
     Mesh mesh(mesh_file,1,1);
+    mesh.UniformRefinement();
+    mesh.UniformRefinement();
+    mesh.UniformRefinement();
 
     // Fonction source (Courant dans la bobine sous forme de condition aux limites)
-    real_t f = 500e3;
+    real_t f = 200e3;
     real_t I_rms = 0.082/sqrt(2);
     int nb_period = 5;
     int nb_iter = 100 * nb_period;
@@ -39,7 +42,26 @@ int main(int argc, char *argv[])
         return I_rms * std::sqrt(2) * std::sin(2 * M_PI * f * t);
     };
 
-    // TD_sim_offline(mesh, NI_sine_func, t_f, nb_iter, N30, false);
+    auto NI_saw_pos_func = [&](real_t t) 
+    {
+        int iter = int(t/Ts);
+        int rest = iter%((int)(nb_iter/nb_period));
+
+        return I_rms * std::sqrt(2) * rest * Ts;
+    };  
+
+    auto NI_saw_func = [&](real_t t) 
+    {
+        int iter = int(t/Ts);
+        int rest = iter%((int)(nb_iter/nb_period));
+
+        if (rest < nb_iter/nb_period/2)
+            return I_rms * std::sqrt(2) * rest * Ts;
+        else
+            return I_rms * std::sqrt(2) * (nb_iter/nb_period - rest) * Ts;
+    };
+
+    // TD_sim_offline(mesh, NI_sine_func, t_f, nb_iter, N30, false, false);
     // std::cout << "test" << std::endl;
     TD_sim_online(mesh, NI_sine_func, t_f, nb_iter, N30, true);
 

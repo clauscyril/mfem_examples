@@ -12,7 +12,7 @@ using namespace mfem;
 #define M_PI 3.14159265358979323846 
 #endif
 
-void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
+void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization, bool save_snapshot){
 
     // ****************** Parameters definitions *********************
     real_t Ts = t_f/(num_steps);
@@ -51,7 +51,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     real_t NI = 0; // For now, initialized to 0;
 
 
-    int order = 2;                      // elements order : 2
+    int order = 1;                      // elements order : 2
     int dim = mesh.Dimension();        // Mesh dimension : 2
     int id = 0;
 
@@ -102,6 +102,8 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     ParGridFunction Enm1(fespace_E);
 
     ParGridFunction Jn(fespace_E);
+    ParGridFunction Jn_x(fespace);  
+    ParGridFunction Jn_y(fespace);  
     ParGridFunction Jnm1(fespace_E);
     // CurlCustomCoefficient *curl_H_coeff = new CurlCustomCoefficient(&Hn);
 
@@ -120,34 +122,12 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     Hnm1 = 0;  
     db_dt = 0;
 
+
     // Definition of the Boundary conditions  :
     Array<int> ess_tdof_list;
     Array<int> dir_bdr(pmesh.bdr_attributes.Max());
     dir_bdr = 1; // All the borders have boundary conditions
     fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
-
-    std::unordered_set<int> ess_tdof_set;
-    for (int i =0; i<ess_tdof_list.Size(); i++) {
-        ess_tdof_set.insert(ess_tdof_list[i]);
-    }
-    std::cout << "Set size : " <<  ess_tdof_set.size() << std::endl;
-    std::cout << "list size : " <<  ess_tdof_list.Size() << std::endl;
-    
-    // std::cout << (ess_tdof_set.find(ess_tdof_list[10]) != ess_tdof_set.end()) << std::endl;
-    // std::cout << (ess_tdof_set.find(100000) != ess_tdof_set.end()) << std::endl;
-    // std::cout << *ess_tdof_set.find(ess_tdof_list[10]) << std::endl;
-
-    int newSize = Hn.Size() - ess_tdof_set.size();
-    unordered_map<int, int> map;
-    Vector TrueHn(newSize);
-    int j = 0;
-    for (int i = 0; i<Hn.Size(); i++) {
-        if (ess_tdof_set.find(i) == ess_tdof_set.end()) {
-            map.insert(std::make_pair(j,i));
-            j++;
-        }
-    }
-    std::cout << map.size() << std::endl;
 
 
     FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
@@ -195,9 +175,15 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     m.AddDomainIntegrator(new MassIntegrator(k_r));
     m.Assemble();
 
+    ParLinearForm lf_surface(fespace);
+    ConstantCoefficient one_coeff(1.);
+    lf_surface.AddDomainIntegrator(new DomainLFIntegrator(one_coeff));
+    lf_surface.Assemble();
+
     r1.Finalize();
     r2.Finalize();
     m.Finalize();
+    
 
     // Parameters for the linear system
     SparseMatrix &A = r1.SpMat();
@@ -240,9 +226,9 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     }
 
     // File for saving the values of the power and flux for each iterations
-    std::string name = "./data/TD_" + std::to_string(1) + ".csv";   
+    std::string name = "./data/fom/TD_" + std::to_string(1) + ".csv";   
     std::ofstream data_file(name);                         
-    data_file << "t;p_eddy;flux;NI\n0;0;0\n";  // Intialising the file with coluns names and first values to 0
+    data_file << "t;p_eddy;flux;NI\n0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
 
 
     int max_num_snapshots = 100;
@@ -256,10 +242,22 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     int numRowRB, numColumnRB;
     StopWatch solveTimer, assembleTimer, mergeTimer;
 
+    const std::string basisNameEx = "data/basisEx";
+    const std::string basisNameEy = "data/basisEy";
+    const std::string basisFileNameEx = basisNameEx + std::to_string(id);
+    const std::string basisFileNameEy = basisNameEy + std::to_string(id);
+    std::unique_ptr<const CAROM::Matrix> spatialbasisEx;
+    std::unique_ptr<const CAROM::Matrix> spatialbasisEy;
+    CAROM::BasisGenerator *generatorEx;
+    CAROM::BasisGenerator *generatorEy;
+
     // options = new CAROM::Options(newSize, max_num_snapshots, update_right_SV);
     options = new CAROM::Options(fespace->GetTrueVSize(), max_num_snapshots, update_right_SV);
 
     generator = new CAROM::BasisGenerator(*options, isIncremental, basisFileName);
+
+    generatorEx = new CAROM::BasisGenerator(*options, isIncremental, basisFileNameEx);
+    generatorEy = new CAROM::BasisGenerator(*options, isIncremental, basisFileNameEy);
 
 
     int vis_steps = 10;  // Number of iterations between two visualizations
@@ -294,12 +292,6 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
         solver.Mult(B, X);
         // Get solution into Hn
         r1.RecoverFEMSolution(X, rhs, Hn);
-
-
-
-        // bool addSample = generator->takeSample(X.GetData());
-
-
 
 
         // *** Update of GridFunctions from solution Hn ***
@@ -383,32 +375,51 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
         {   
             std::cout << "Time step: " << step << ", Time: " << t << std::endl;
 
-            // Snapshot generation by removing border elements (Dirichlet Bondary conditions)
-            for (int i = 0; i<newSize; i++){
-                TrueHn(i) = Hn(map[i]);
+
+            std::string name2 = "./data/fom/Hn_" + std::to_string(step) + ".csv";   
+            std::ofstream data_file2(name2);                         
+            data_file2 << "Hn\n";  // Intialising the file with coluns names and first values to 0
+            for (int i = 0; i<Hn.Size(); i++) {
+                data_file2 << Hn(i) << std::endl;
             }
-            bool addSample = generator->takeSample(Hn.GetData());
-            
+
+            if (save_snapshot)
+            {
+                for (int i = 0; i<Hn.Size(); i++) {
+                    Jn_x(i) = Jn(i);
+                    Jn_y(i) = Jn(i+Hn.Size());
+                }
+                
+                bool addSample = generator->takeSample(Hn.GetData());
+                bool addSampleEx = generatorEx->takeSample(Jn_x.GetData());
+                bool addSampleEy = generatorEy->takeSample(Jn_x.GetData());
+            }
 
 
             if (visualization)
             {
                 sout.precision(8);
                 sout << "solution\n"
-                     << pmesh << Hn
+                     << pmesh << Jn_y
                      << "window_title 'Champ H'"
                      << std::flush;
                 sout_e << "solution\n" << pmesh << En <<  "window_title 'Champ E'" << std::flush;
                 sout_j << "solution\n" << pmesh << Jn <<  "window_title 'Courant J'" << std::flush;
-                sout_b << "solution\n" << pmesh << Bn <<  "window_title 'Field B'" << std::flush;
+                sout_b << "solution\n" << pmesh << Jn_x <<  "window_title 'Field B'" << std::flush;
 
                 // std::cin.get(); // Décommenter pour pause manuelle
             }
         }
         
     }
-    generator->writeSnapshot();
-    generator->endSamples();
+    if (save_snapshot) {
+        generator->writeSnapshot();
+        generatorEx->writeSnapshot();
+        generatorEy->writeSnapshot();
+        generator->endSamples();
+        generatorEx->endSamples();
+        generatorEy->endSamples();
+    }
     delete generator;
     delete options;
     data_file.close();
@@ -417,8 +428,6 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
 }
 
 void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
-
-
 
      real_t Ts = t_f/(num_steps);
 
@@ -456,7 +465,7 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     real_t NI = 0; // For now, initialized to 0;
 
 
-    int order = 2;                      // elements order : 2
+    int order = 1;                      // elements order : 2
     int dim = mesh.Dimension();        // Mesh dimension : 2
     int id = 0;
 
@@ -496,19 +505,35 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     HYPRE_Int size = fespace->GlobalTrueVSize();
 
     ParGridFunction Hn(fespace);     // H^n
-    ParGridFunction HnD(fespace);     // H^n
     ParGridFunction Hnm1(fespace);   // H^{n-1}
-    ParGridFunction db_dt(fespace);
-    ParGridFunction db_dtm1(fespace);
+    ParGridFunction Pn(fespace);     // Pn
+    ParGridFunction Jnx(fespace);     // Pn
+    ParGridFunction Jnx_test(fespace);     // Pn
+
+    
+    ParGridFunction Bn(fespace);
+
+    ParGridFunction En(fespace_E);
+    ParGridFunction Enm1(fespace_E);
+
+    ParGridFunction Jn(fespace_E);
+    ParGridFunction Jnm1(fespace_E);
+
 
 
 
     // Initializing all values to 0
     Hn = 0;
-    HnD = 0;
-
     Hnm1 = 0;  
-    db_dt = 0;
+    Pn = 0;
+
+    Bn = 0;
+    En = 0;
+    Enm1 = 0;
+    Jn = 0;
+    Jnm1 = 0;
+
+
 
     // Definition of the Boundary conditions  :
     Array<int> ess_tdof_list;
@@ -518,7 +543,7 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
 
 
     FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
-    Hnm1.ProjectBdrCoefficient(bdr_coeff, dir_bdr);
+    Hnm1.ProjectBdrCoefficient(bdr_coeff, dir_bdr);  // Not necessary as the initial bdc is 0
 
     // **** Coefficients for bilinear forms ****
     FunctionCoefficient r_coeff(r_coeff_func);
@@ -545,16 +570,6 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     ProductCoefficient k_r(k, r_coeff);
     // **************************************************
 
-    // ******* Definition of Bilinear and Linear Forms ********
-    // ParLinearForm *b = new ParLinearForm(fespace);
-    // *b = 0;
-    // b->Assemble();
-    // ParLinearForm *b1 = new ParLinearForm(fespace);
-    // *b1 = 0;
-    // b1->Assemble();
-    // ParLinearForm *b2 = new ParLinearForm(fespace);
-    // *b2 = 0;
-    // b2->Assemble();
 
     ParBilinearForm r1(fespace); 
     r1.AddDomainIntegrator(new DiffusionIntegrator(A1_r));
@@ -572,41 +587,80 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     m.AddDomainIntegrator(new MassIntegrator(k_r));
     m.Assemble();
 
+
+    // ParBilinearForm curl_x(fespace);
+    // ConstantCoefficient minusone(-1.);
+    // curl_x.AddDomainIntegrator(new DerivativeIntegrator(minusone, 1));
+    // curl_x.Assemble();
+
+    // ParBilinearForm curl_y(fespace);
+    // ProductCoefficient inv_r(inv_r_square_coeff, r_coeff);
+    // ConstantCoefficient one_coeff(1.);
+    // curl_y.AddDomainIntegrator(new DerivativeIntegrator(one_coeff,0));
+    // curl_y.AddDomainIntegrator(new MassIntegrator(inv_r));
+    // curl_y.Assemble();
+
+    // ParBilinearForm mass(fespace);
+    // mass.AddDomainIntegrator(new MassIntegrator(one_coeff));
+    // mass.Assemble();
+
+    // ParBilinearForm kx(fespace);
+    // ParBilinearForm ky(fespace);
+    // kx.AddDomainIntegrator(new DerivativeIntegrator(minusone,1));
+    // ky.AddDomainIntegrator(new DerivativeIntegrator(one_coeff,0));
+    // ky.AddDomainIntegrator(new MassIntegrator(inv_r));
+    // kx.Assemble();
+    // ky.Assemble();
+
+
     r1.Finalize();
     r2.Finalize();
     m.Finalize();
+    // curl_x.Finalize();
+    // curl_y.Finalize();
 
     // Parameters for the linear system
     // SparseMatrix &A = r1.SpMat();
     // // HypreParMatrix &A = r1.Ma
     // SparseMatrix &R2 = r2.SpMat();
     // SparseMatrix &M = m.SpMat();
-    HypreParMatrix A, R2, M;
+    HypreParMatrix A, R2, M, Cx, Cy, Mass, Kx, Ky;
     ParLinearForm b(fespace);
     b = 0;
     b.Assemble();
     Vector X, B;
+    Vector zero_vector(Hn.Size());
     
     Vector rhs(fespace->GetTrueVSize());
     Vector R2Hnm1(fespace->GetTrueVSize());
     Vector MdBdt(fespace->GetTrueVSize());
 
 
-    Array<int> ess_tdof_list_fake;
-    // Vector X_fake, B_fake;
-    // r1.FormLinearSystem(ess_tdof_list, Hn, b, A, X, B);  
-    // r2.FormLinearSystem(ess_tdof_list_fake, Hn, b, R2, X_fake, B_fake); // Not applying bc here
-    // m.FormLinearSystem(ess_tdof_list_fake, Hn, b, M, X_fake, B_fake);
+    Array<int> ess_tdof_list_fake; // Used to generate the Matrixes of the bilinear forms r2 and m 
 
-    r1.FormSystemMatrix(ess_tdof_list, A); // Applying BC 
-    r2.FormSystemMatrix(ess_tdof_list_fake, R2); // Applying BC
-    m.FormSystemMatrix(ess_tdof_list_fake, M); // Applying BC
+    r1.FormLinearSystem(ess_tdof_list, Hn, b, A, X, B); // Here using FormLinearSystem to initialize X and B 
+    r2.FormSystemMatrix(ess_tdof_list_fake, R2); // Generating the matrixes R2 and M from the bilinear forms
+    m.FormSystemMatrix(ess_tdof_list_fake, M);   // --------------------------------
+    // curl_x.FormSystemMatrix(ess_tdof_list_fake, Cx); 
+    // curl_y.FormSystemMatrix(ess_tdof_list_fake, Cy);
+    // mass.FormSystemMatrix(ess_tdof_list_fake, Mass); 
+    // kx.FormSystemMatrix(ess_tdof_list_fake, Kx); 
+    // ky.FormSystemMatrix(ess_tdof_list_fake, Ky);
+ 
+
+    
+    // File for saving the values of the power and flux for each iterations
+    std::string name = "./data/reduced/TD_" + std::to_string(1) + ".csv";   
+    std::ofstream data_file(name);                         
+    data_file << "t;p_eddy;flux;NI;flux_reduced\n0;0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
 
 
+
+    // Elements for generating the reduced system (LibRom elements)
     int max_num_snapshots = 100;
     bool update_right_SV = false;
     bool isIncremental = false;
-    const std::string basisName = "data/basis0";
+    const std::string basisName = "data/basis";
     const std::string basisFileName = basisName + std::to_string(id);
     std::unique_ptr<const CAROM::Matrix> spatialbasis;
     CAROM::Options* options;
@@ -614,59 +668,117 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     int numRowRB, numColumnRB;
     StopWatch solveTimer, assembleTimer, mergeTimer;
 
+    const std::string basisNameEx = "data/basisEx";
+    const std::string basisNameEy = "data/basisEy";
+    const std::string basisFileNameEx = basisNameEx + std::to_string(id);
+    const std::string basisFileNameEy = basisNameEy + std::to_string(id);
+    std::unique_ptr<const CAROM::Matrix> spatialbasisEx;
+    std::unique_ptr<const CAROM::Matrix> spatialbasisEy;
+    CAROM::BasisGenerator *generatorEx;
+    CAROM::BasisGenerator *generatorEy;
 
 
-    assembleTimer.Start();
-    CAROM::BasisReader reader(basisName);
-    spatialbasis = reader.getSpatialBasis();
+
+    assembleTimer.Start();  // Timer for estimating the assembling time of the reduced system
+    CAROM::BasisReader reader(basisFileName);  // Get Snapshot in a BasisReader object
+    CAROM::BasisReader readerEx(basisFileNameEx);  // Get Snapshot in a BasisReader object
+    CAROM::BasisReader readerEy(basisFileNameEy);  // Get Snapshot in a BasisReader object
+    spatialbasis = reader.getSpatialBasis(); // Generate the reduced basis
+    spatialbasisEx = readerEx.getSpatialBasis(); // Generate the reduced basis
+    spatialbasisEy = readerEy.getSpatialBasis(); // Generate the reduced basis
     numRowRB = spatialbasis->numRows();
     numColumnRB = spatialbasis->numColumns();
     if (myid == 0) printf("spatial basis dimension is %d x %d\n", numRowRB,
                                 numColumnRB);
 
-    std::cin.get();
     // libROM stores the matrix row-wise, so wrapping as a DenseMatrix in MFEM means it is transposed.
     DenseMatrix *reducedBasisT = new DenseMatrix(spatialbasis->getData(),
             numColumnRB, numRowRB);
     
-    spatialbasis->print("test1");
+    
+    // Save the spatial basis in a file
+    spatialbasis->print("data/phi");
+    spatialbasisEx->print("data/phiEx");
+    spatialbasisEy->print("data/phiEy");
     // 21. form ROM operators
+
     CAROM::Matrix ReducedA(numColumnRB, numColumnRB, false);
     CAROM::Matrix invReducedA(numColumnRB, numColumnRB, false);
     CAROM::Matrix ReducedR2(numColumnRB, numColumnRB, false);
     CAROM::Matrix ReducedM(numColumnRB, numColumnRB, false);
+    // CAROM::Matrix ReducedCx(numColumnRB, numColumnRB, false);
+    // CAROM::Matrix ReducedCy(numColumnRB, numColumnRB, false);
 
-    ComputeCtAB(A, *spatialbasis, *spatialbasis, ReducedA);    // Reduced A
+
+    // CAROM::Matrix Cx_Carom(Hn.Size(), Hn.Size(), false);
+    // CAROM::Matrix Cy_Carom(Hn.Size(), Hn.Size(), false);
+
+
+
+    ComputeCtAB(A, *spatialbasis, *spatialbasis, ReducedA);    // Reduced A = phi^t * A * phi
     ComputeCtAB(A, *spatialbasis, *spatialbasis, invReducedA); // inverse of Reduced A 
     invReducedA.inverse();
     ComputeCtAB(R2, *spatialbasis, *spatialbasis, ReducedR2); // Reduced R2
     ComputeCtAB(M, *spatialbasis, *spatialbasis, ReducedM);   // Reduced M
-    invReducedA.print("A_inv");
-    ReducedA.print("A");
+    invReducedA.print("data/A_inv");
+    ReducedA.print("data/A");
 
-    
+    // ComputeCurl(Mass, Kx, Cx_Carom);
+    // ComputeCurl(Mass, Ky, Cy_Carom);
+
+    // Cy_Carom.print("data/reduced/test_Cy");
+    // ComputeCtAB(Cx_Carom, *spatialbasis, *spatialbasis, ReducedA);    // Reduced A = phi^t * A * phi
+    // ComputeCtAB(A, *spatialbasis, *spatialbasis, invReducedA); // inverse of Reduced A 
+
     CAROM::Vector B_carom(B.GetData(), B.Size(), true, false);  // B Compatible with libRom
-    CAROM::Vector X_carom(X.GetData(), X.Size(), true, false);  // X Compatible with libRom
+    CAROM::Vector X_carom(X.GetData(), X.Size(), true, false);  // X Compatible with libRom 
+    CAROM::Vector Bn_carom(Bn.GetData(), Bn.Size(), true, false);  // X Compatible with libRom
+    
+    // CAROM::Vector Ex_carom(zero_vector.GetData(), zero_vector.Size(), true, false);  //
+    // CAROM::Vector Ey_carom(zero_vector.GetData(), zero_vector.Size(), true, false);
 
-    std::unique_ptr<CAROM::Vector> reducedRHS = spatialbasis->transposeMult(B_carom); // Reduced version of B
+    // CAROM::Vector jx_carom(zero_vector.GetData(), zero_vector.Size(), true, false);  
+    // CAROM::Vector jy_carom(zero_vector.GetData(), zero_vector.Size(), true, false);
 
-    CAROM::Vector reducedHn(numColumnRB, false);
+    std::unique_ptr<CAROM::Vector> reducedRHS = spatialbasis->transposeMult(B_carom); // Reduced version of B : phi^T*B
+
+    CAROM::Vector reducedHn(numColumnRB, false);  // Reduced version of Hn
     reducedHn = 0;
-
     CAROM::Vector reducedHnm1(numColumnRB, false);
     reducedHnm1 = 0;
 
+    CAROM::Vector reducedBn(numColumnRB, false);  // Reduced version of Bn 
+    reducedBn = 0;
+    CAROM::Vector reducedBnm1(numColumnRB, false);
+    reducedBnm1 = 0;
+
     CAROM::Vector reducedBdtn(numColumnRB, false);
     reducedBdtn = 0;
+
+    // CAROM::Vector reducedEx(numColumnRB, false);
+    // reducedEx = 0;
+    // CAROM::Vector reducedEy(numColumnRB, false);
+    // reducedEy = 0;
+
+    // CAROM::Vector reducedExnm1(numColumnRB, false);
+    // reducedExnm1 = 0;
+    // CAROM::Vector reducedEynm1(numColumnRB, false);
+    // reducedEynm1 = 0;
+
+    // CAROM::Vector reducedJxnm1(numColumnRB, false);
+    // reducedJxnm1 = 0;
+    // CAROM::Vector reducedJynm1(numColumnRB, false);
+    // reducedJynm1 = 0;
+
+
+
 
     assembleTimer.Stop();
 
     std::cout << "Number of dof : " << fespace->GetNDofs() << std::endl;
     std::cout << "VSize : " << fespace->GetTrueVSize() << std::endl;
-    std::cin.get();
- 
-    Vector AHnD;
 
+ 
     socketstream sout;
 
     char vishost[] = "localhost";
@@ -690,33 +802,27 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
         t += Ts;                    // New time 
         bdr_coeff.SetTime(t);       // Update boundary conditions fonction's time parameters
         Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr); // Setting new boundary conditions on Hn
-        r1.FormLinearSystem(ess_tdof_list, Hn, rhs, A, X, B);  // On doit Recalculer rhs à la fin de la boucle
 
-        
+        b = 0;
+        b.Assemble();
 
-
-
-        A.Mult(HnD, AHnD);
-        CAROM::Vector HnD_carom(HnD.GetData(), HnD.Size(), true, false);
-        CAROM::Vector AHnD_carom(AHnD.GetData(), AHnD.Size(), true, false);
-        AHnD_carom.print("hnd");
-
-        std::unique_ptr<CAROM::Vector> HnD_reduced = spatialbasis->transposeMult(HnD_carom);
-        std::unique_ptr<CAROM::Vector> reduced_AHnD = spatialbasis->transposeMult(AHnD_carom);
-   
-
-
+        r1.FormLinearSystem(ess_tdof_list, Hn, b, A, X, B);  // On doit Recalculer rhs à la fin de la boucle
+        // Here B contains the bondary conditions only, it'll be used to add thoses boundary conditions to rhs later after being reduced
+        CAROM::Vector B_carom_bdr(B.GetData(), B.Size(), true, false); 
+        std::unique_ptr<CAROM::Vector> B_bdr_reduced = spatialbasis->transposeMult(B_carom_bdr);
+    
         // reducedRHS = reducedR2 * reduced_hnm1 + reducedM * reducedDBdT
         std::unique_ptr<CAROM::Vector> reduced_R2Hnm1 = ReducedR2.mult(reducedHnm1);
         std::unique_ptr<CAROM::Vector> reduced_MdBdt = ReducedM.mult(reducedBdtn);
         *reducedRHS = *reduced_R2Hnm1;
         *reducedRHS += *reduced_MdBdt;
-        // RHS = RHS - AHnD, takes DBC into consideration
+
+        *reducedRHS += *B_bdr_reduced;
+
         solveTimer.Start();
         invReducedA.mult(*reducedRHS, reducedHn);
-        reducedHn += *HnD_reduced;  // Adding DBC
+
         solveTimer.Stop();
-        std::cout << "ROM Computed" << std::endl;
 
         // Update of db_dt with : (db_dt)_n = B1*Hn + B2*Hn-1 + B3*(db_dt)_n-1
         reducedBdtn *= B3;
@@ -727,26 +833,124 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
         reducedBdtn += reducedHn;
 
         reducedHn *= 1/B1;
+        reducedHnm1 *= 1/B2;
+
+        // Bn = C1 Hn + C2 Hnm1 + C3 Bnm1
+        reducedHn *= C1;
+        reducedHnm1 *= C2;
+        reducedBnm1 *= C3;
+
+        reducedBn = reducedHn;
+        reducedBn += reducedHnm1;
+        reducedBn += reducedBnm1; // reduecedBn up to date
+
+        reducedHn *= 1/C1;
         reducedHnm1 = reducedHn;
-                
-        spatialbasis->mult(reducedHn, X_carom);
-        for (int i = 0; i<fespace->GetNE(); i++){
-            Hn(i) = X_carom(i);
+        reducedBnm1 = reducedBn;
+
+
+        // std::unique_ptr<CAROM::Vector> reduced_Jx = ReducedCx.mult(reducedHn);
+        // std::unique_ptr<CAROM::Vector> reduced_Jy = ReducedCy.mult(reducedHn);
+
+        // reducedExnm1 *= A3;
+        // reducedJxnm1 *= A2;
+        // *reduced_Jx *= A1;
+        // reducedEx = *reduced_Jx;
+        // reducedEx += reducedJxnm1;
+        // reducedEx += reducedExnm1;
+
+        // reducedEynm1 *= A3;
+        // reducedJynm1 *= A2;
+        // *reduced_Jy *= A1;
+        // reducedEy = *reduced_Jy;
+        // reducedEy += reducedJynm1;
+        // reducedEy += reducedEynm1;
+
+        // *reduced_Jx *= 1/A1;
+        // *reduced_Jy *= 1/A1;
+        
+        // reducedJxnm1 = *reduced_Jx;
+        // reducedJynm1 = *reduced_Jy;
+        // reducedExnm1 = reducedEx;
+        // reducedEynm1 = reducedEy;
+
+        /*
+        Jn_temp = Jn;
+        Jn_temp *=A1;
+        Jnm1 *= A2;
+        Enm1 *= A3;
+        En = 0;
+        En+=Jn_temp;
+        En+=Jnm1;
+        En+=Enm1;
+        */
+
+        spatialbasis->mult(reducedHn, X_carom);  // Getting full version of Hn in X_carom (compatible libRom)
+        spatialbasis->mult(reducedBn, Bn_carom);  // Getting full version of Hn in X_carom (compatible libRom)
+        // spatialbasisEx->mult(*reduced_Jx, jx_carom);
+        // spatialbasisEy->mult(*reduced_Jy, jy_carom);
+        // spatialbasisEx->mult(reducedEx, Ex_carom);
+        // spatialbasisEy->mult(reducedEy, Ey_carom);
+
+        for (int i = 0; i<Hn.Size(); i++){       
+            Hn(i) = X_carom(i);                  // Getting Hn in a mfem::Vector
+            Bn(i) = Bn_carom(i);
+            // Pn(i) = jx_carom(i) * Ex_carom(i) + jy_carom(i) * Ey_carom(i);
+            // Jnx(i) = jx_carom(i);
         }
+
+
+        Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr);  // Ensuring bdr conditions (may not be necessary)
+
+        // // ***** computation of magnetic flux ***********
+        // GridFunctionCoefficient B_coeff(&Bn);
+        // GridFunction one(fespace);
+        // one = 1;
+        // LinearForm lf_flux(fespace);
+        // lf_flux.AddDomainIntegrator(new DomainLFIntegrator(B_coeff));
+        // lf_flux.Assemble();
+
+        // real_t flux = lf_flux(one);
+
+        // GridFunctionCoefficient P_eddy_coeff(&Pn);
+        // LinearForm lf(fespace);
+        // lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
+        // lf.Assemble();
+        // real_t P_eddy_tot = 2*M_PI*lf(one);
+        // real_t vol = M_PI * height * (Rout*Rout - Ri*Ri);
+        // real_t P_eddy = P_eddy_tot/vol;
+
+        real_t flux = 0;
+        real_t P_eddy = 0;
+        real_t flux_test = 0;
+
+
+        data_file << t << ";" << P_eddy << ";" << flux << ";" << NI_func(t) <<";" << flux_test << std::endl;
+
+
+
+
         if (step % vis_steps == 0 )
         {       
             std::cout << "Time step: " << step << ", Time: " << t << std::endl;
-            reducedHn.print("test");
-            X_carom.print("test2");
+            string name = "data/reduced/Hn_reduced_"+to_string(step);  
+            X_carom.print(name.c_str());
+            // Vector lf_vect = lf;
+            // for (int i = 0; i<50; i++){
+            //     std::cout << lf_carom(i) << std::endl;
+            // }
             if (visualization)
             {
+                // Cy.Mult(Hn, Jnx_test);
+                // std::cout << Cx.Height() << std::endl;
                 sout.precision(8);
                 sout << "solution\n"
-                     << pmesh << Hn
+                     << pmesh << Jnx_test
                      << "window_title 'Champ H'"
                      << std::flush;
+                // std::cin.get();
             }
-            std::cin.get();
+            
         }
     }
 }
@@ -769,3 +973,44 @@ real_t PowerLossCoefficient_TD::Eval(ElementTransformation &T,
 }
 
 
+
+
+void ComputeCurl(const mfem::HypreParMatrix& Mass,
+                           const mfem::HypreParMatrix& Kx,
+                           CAROM::Matrix& C) // Output: dense, local
+{
+    const int n = Mass.NumRows();
+    const int m = Kx.NumCols();
+
+    MFEM_VERIFY(Kx.NumRows() == n && C.numRows() == n && C.numColumns() == m,
+                "Dimensions incompatibles entre Mass, Kx et C.");
+
+    // Setup solveur
+    mfem::CGSolver solver(MPI_COMM_WORLD);
+    mfem::HypreBoomerAMG amg(Mass); // Préconditionneur
+    solver.SetOperator(Mass);
+    solver.SetPreconditioner(amg);
+    solver.SetRelTol(1e-10);
+    solver.SetMaxIter(500);
+    solver.SetPrintLevel(0);
+
+    // Vecteurs de travail
+    mfem::Vector ej(m);      // base canonique
+    mfem::Vector Kxej(n);    // Kx * ej
+    mfem::Vector xj(n);      // solution M^{-1} * Kxej
+
+    for (int j = 0; j < m; ++j)
+    {
+        ej = 0.0;
+        ej[j] = 1.0;
+
+        Kx.Mult(ej, Kxej);     // j-ième colonne de Kx
+        solver.Mult(Kxej, xj); // xj = M^{-1} * Kxej
+
+        // Stockage dans C
+        for (int i = 0; i < n; ++i)
+        {
+            C(i, j) = xj[i];
+        }
+    }
+}

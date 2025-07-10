@@ -14,7 +14,7 @@ set(LIBROM_DIR "C:/Program Files (x86)/libROM")
 include_directories(${LIBROM_DIR}/include)
 link_directories(${LIBROM_DIR}/lib)
 
-add_executable(main main_test.cpp  
+add_executable(main main.cpp  
                     ../../source/customcurl.cpp 
                     solver_TD_FOM.cpp)
 

@@ -24,7 +24,7 @@ int main() {
 
     auto bdr_func = [](const Vector &x) -> real_t
     {
-        return x(0)*x(0);
+        return 100 * x(0)*x(0);
     };
 
 
@@ -49,8 +49,22 @@ int main() {
     Vector X, B;
     B = b;
 
-    std::cout << a.StaticCondensationIsEnabled() << std::endl;
+
+    b.Print(std::cout);
+
+    // std::cout << a.StaticCondensationIsEnabled() << std::endl;
     a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
+    
+    // a.EliminateVDofsInRHS(ess_tdof_list, x, b);
+    std::cout << "test" << std::endl;
+    b.Print(std::cout);
+
+    for (int i = 0; i < fespace->GetNE(); i++) {
+        std::cout << B(i) << std::endl;    
+    }
+
+    std::cout << "b height : " << b.Size() << ", B height : "  << B.Size() << std::endl;
+    return 0;
 
     // StaticCondensation static_cond(fespace);
     // static_cond.SetEssentialTrueDofs(ess_tdof_list);
