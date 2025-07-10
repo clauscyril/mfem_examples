@@ -22,7 +22,8 @@ int main(int argc, char *argv[])
     Ferrite N87("N87", 4.24e-2, 1.48e-1, 2.68e-6, 2200);
     Ferrite T38("T38", 4.04e-2, 1.07e1, 8.06e-6, 10000);
 
-    const char *mesh_file = "../../../../mesh/square.msh";
+    // const char *mesh_file = "../../../../mesh/square.msh";
+    const char *mesh_file = "C:/Users/cyril/Projets/mfem_examples/Loss Computation in Ferrites/mesh/square.msh";
 
     Mesh mesh(mesh_file,1,1);
     mesh.UniformRefinement();
@@ -61,7 +62,7 @@ int main(int argc, char *argv[])
             return I_rms * std::sqrt(2) * (nb_iter/nb_period - rest) * Ts;
     };
 
-    // TD_sim_offline(mesh, NI_sine_func, t_f, nb_iter, N30, false, false);
+    // TD_sim_offline(mesh, NI_sine_func, t_f, nb_iter, N30, false, true);
     // std::cout << "test" << std::endl;
     TD_sim_online(mesh, NI_sine_func, t_f, nb_iter, N30, true);
 

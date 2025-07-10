@@ -89,6 +89,10 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     ParFiniteElementSpace *fespace_E = new ParFiniteElementSpace(&pmesh, fec, dim);
 
     HYPRE_Int size = fespace->GlobalTrueVSize();
+    if (myid == 0)
+    {
+        cout << "Number of finite element unknowns: " << size << endl;
+    }
 
     ParGridFunction Hn(fespace);     // H^n
     ParGridFunction Hnm1(fespace);   // H^{n-1}
@@ -129,7 +133,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     dir_bdr = 1; // All the borders have boundary conditions
     fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
 
-
+    
     FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
     Hnm1.ProjectBdrCoefficient(bdr_coeff, dir_bdr);
 
@@ -159,19 +163,19 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     // **************************************************
 
     // ******* Definition of Bilinear and Linear Forms ********
-    BilinearForm r1(fespace); 
+    ParBilinearForm r1(fespace); 
     r1.AddDomainIntegrator(new DiffusionIntegrator(A1_r));
     r1.AddDomainIntegrator(new MassIntegrator(B1_r));
     r1.AddDomainIntegrator(new MassIntegrator(A1_r_inv));
     r1.Assemble();
 
-    BilinearForm r2(fespace); 
+    ParBilinearForm r2(fespace); 
     r2.AddDomainIntegrator(new DiffusionIntegrator(A2_r));
     r2.AddDomainIntegrator(new MassIntegrator(B2_r));
     r2.AddDomainIntegrator(new MassIntegrator(A2_r_inv));
     r2.Assemble();
 
-    BilinearForm m(fespace);
+    ParBilinearForm m(fespace);
     m.AddDomainIntegrator(new MassIntegrator(k_r));
     m.Assemble();
 
@@ -186,7 +190,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     
 
     // Parameters for the linear system
-    SparseMatrix &A = r1.SpMat();
+    // SparseMatrix &A = r1.SpMat();
     Vector rhs(fespace->GetTrueVSize());
     Vector R2Hnm1(fespace->GetTrueVSize());
     Vector MdBdt(fespace->GetTrueVSize());
@@ -194,8 +198,15 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     Vector x(fespace->GetTrueVSize()); // For defining the linear system, considering Dirichlet's bdc
 
     // Solver for the linear system
-    UMFPackSolver solver;
-    solver.SetOperator(A);
+    // UMFPackSolver solver;
+    // solver.SetOperator(A);
+    CGSolver solver(MPI_COMM_WORLD);
+    solver.SetRelTol(1e-12);
+    solver.SetMaxIter(2000);
+    solver.SetPrintLevel(0);
+
+
+
 
     // Sockets stream for showing the results using glvis (if visualization is set to true) 
     socketstream sout;
@@ -281,7 +292,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
         rhs = R2Hnm1;
         rhs += MdBdt;
         
-        SparseMatrix A_sys;
+        HypreParMatrix A_sys;
         Vector X, B;
 
         // Form linear system taking boundary conditions into account
@@ -299,7 +310,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
         // Update of db_dt with : (db_dt)_n = B1*Hn + B2*Hn-1 + B3*(db_dt)_n-1
         db_dtm1 *= B3;
 
-        GridFunction H_temp(fespace); // temporary GridFunction to avoid modifying Hn
+        ParGridFunction H_temp(fespace); // temporary GridFunction to avoid modifying Hn
         H_temp = Hn;
         H_temp *= B1;  // Hn*B1
 
@@ -331,9 +342,9 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
 
         // ***** computation of magnetic flux ***********
         GridFunctionCoefficient B_coeff(&Bn);
-        GridFunction one(fespace);
+        ParGridFunction one(fespace);
         one = 1;
-        LinearForm lf_flux(fespace);
+        ParLinearForm lf_flux(fespace);
         lf_flux.AddDomainIntegrator(new DomainLFIntegrator(B_coeff));
         lf_flux.Assemble();
 
@@ -343,7 +354,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
         CurlCustomCoefficient J_coeff(&Hn);
         Jn.ProjectCoefficient(J_coeff);  // Jn = curl(Hn)
 
-        GridFunction Jn_temp(fespace_E);
+        ParGridFunction Jn_temp(fespace_E);
         Jn_temp = Jn;
         Jn_temp *=A1;
         Jnm1 *= A2;
@@ -358,7 +369,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
 
         VectorGridFunctionCoefficient E_coeff(&En);
         PowerLossCoefficient_TD P_eddy_coeff(fespace_E, J_coeff, E_coeff);
-        LinearForm lf(fespace);
+        ParLinearForm lf(fespace);
         lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
         lf.Assemble();
         real_t P_eddy_tot = 2*M_PI*lf(one);
@@ -376,7 +387,8 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
             std::cout << "Time step: " << step << ", Time: " << t << std::endl;
 
 
-            std::string name2 = "./data/fom/Hn_" + std::to_string(step) + ".csv";   
+            std::string name2 = "./data/fom/Hn_" + std::to_string(step) + std::to_string(myid)+ ".csv";   
+            std::cout << name2 << std::endl;
             std::ofstream data_file2(name2);                         
             data_file2 << "Hn\n";  // Intialising the file with coluns names and first values to 0
             for (int i = 0; i<Hn.Size(); i++) {
@@ -948,7 +960,7 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
                      << pmesh << Jnx_test
                      << "window_title 'Champ H'"
                      << std::flush;
-                // std::cin.get();
+                std::cin.get();
             }
             
         }
