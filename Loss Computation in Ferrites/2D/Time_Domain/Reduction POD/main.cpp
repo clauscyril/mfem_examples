@@ -26,14 +26,14 @@ int main(int argc, char *argv[])
     const char *mesh_file = "C:/Users/cyril/Projets/mfem_examples/Loss Computation in Ferrites/mesh/square.msh";
 
     Mesh mesh(mesh_file,1,1);
-    mesh.UniformRefinement();
-    mesh.UniformRefinement();
-    mesh.UniformRefinement();
+    // mesh.UniformRefinement();
+    // mesh.UniformRefinement();
+    // mesh.UniformRefinement();
 
     // Fonction source (Courant dans la bobine sous forme de condition aux limites)
     real_t f = 200e3;
     real_t I_rms = 0.082/sqrt(2);
-    int nb_period = 5;
+    int nb_period = 3;
     int nb_iter = 100 * nb_period;
     real_t Ts = nb_period/f/nb_iter;
 

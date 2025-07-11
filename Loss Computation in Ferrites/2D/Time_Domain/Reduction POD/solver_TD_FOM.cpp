@@ -83,7 +83,6 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     };
     
 
-
     FiniteElementCollection *fec = new H1_FECollection(order, dim); 
     ParFiniteElementSpace *fespace = new ParFiniteElementSpace(&pmesh, fec);
     ParFiniteElementSpace *fespace_E = new ParFiniteElementSpace(&pmesh, fec, dim);
@@ -237,7 +236,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     }
 
     // File for saving the values of the power and flux for each iterations
-    std::string name = "./data/fom/TD_" + std::to_string(1) + ".csv";   
+    std::string name = "./data/fom/TD_" + std::to_string(myid) + ".csv";   
     std::ofstream data_file(name);                         
     data_file << "t;p_eddy;flux;NI\n0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
 
@@ -404,7 +403,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
                 
                 bool addSample = generator->takeSample(Hn.GetData());
                 bool addSampleEx = generatorEx->takeSample(Jn_x.GetData());
-                bool addSampleEy = generatorEy->takeSample(Jn_x.GetData());
+                bool addSampleEy = generatorEy->takeSample(Jn_y.GetData());
             }
 
 
@@ -440,8 +439,8 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
 }
 
 void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
-
-     real_t Ts = t_f/(num_steps);
+    
+    real_t Ts = t_f/(num_steps);
 
     // geometric parameters
     real_t Ri = 9.6e-3/2.0;
@@ -520,9 +519,9 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     ParGridFunction Hnm1(fespace);   // H^{n-1}
     ParGridFunction Pn(fespace);     // Pn
     ParGridFunction Jnx(fespace);     // Pn
-    ParGridFunction Jnx_test(fespace);     // Pn
+    ParGridFunction Jny(fespace);     // Pn
+    // ParGridFunction Jnx_test(fespace);     // Pn
 
-    
     ParGridFunction Bn(fespace);
 
     ParGridFunction En(fespace_E);
@@ -530,9 +529,6 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
 
     ParGridFunction Jn(fespace_E);
     ParGridFunction Jnm1(fespace_E);
-
-
-
 
     // Initializing all values to 0
     Hn = 0;
@@ -600,30 +596,6 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     m.Assemble();
 
 
-    // ParBilinearForm curl_x(fespace);
-    // ConstantCoefficient minusone(-1.);
-    // curl_x.AddDomainIntegrator(new DerivativeIntegrator(minusone, 1));
-    // curl_x.Assemble();
-
-    // ParBilinearForm curl_y(fespace);
-    // ProductCoefficient inv_r(inv_r_square_coeff, r_coeff);
-    // ConstantCoefficient one_coeff(1.);
-    // curl_y.AddDomainIntegrator(new DerivativeIntegrator(one_coeff,0));
-    // curl_y.AddDomainIntegrator(new MassIntegrator(inv_r));
-    // curl_y.Assemble();
-
-    // ParBilinearForm mass(fespace);
-    // mass.AddDomainIntegrator(new MassIntegrator(one_coeff));
-    // mass.Assemble();
-
-    // ParBilinearForm kx(fespace);
-    // ParBilinearForm ky(fespace);
-    // kx.AddDomainIntegrator(new DerivativeIntegrator(minusone,1));
-    // ky.AddDomainIntegrator(new DerivativeIntegrator(one_coeff,0));
-    // ky.AddDomainIntegrator(new MassIntegrator(inv_r));
-    // kx.Assemble();
-    // ky.Assemble();
-
 
     r1.Finalize();
     r2.Finalize();
@@ -636,7 +608,7 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     // // HypreParMatrix &A = r1.Ma
     // SparseMatrix &R2 = r2.SpMat();
     // SparseMatrix &M = m.SpMat();
-    HypreParMatrix A, R2, M, Cx, Cy, Mass, Kx, Ky;
+    HypreParMatrix A, R2, M;
     ParLinearForm b(fespace);
     b = 0;
     b.Assemble();
@@ -653,12 +625,46 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     r1.FormLinearSystem(ess_tdof_list, Hn, b, A, X, B); // Here using FormLinearSystem to initialize X and B 
     r2.FormSystemMatrix(ess_tdof_list_fake, R2); // Generating the matrixes R2 and M from the bilinear forms
     m.FormSystemMatrix(ess_tdof_list_fake, M);   // --------------------------------
-    // curl_x.FormSystemMatrix(ess_tdof_list_fake, Cx); 
-    // curl_y.FormSystemMatrix(ess_tdof_list_fake, Cy);
-    // mass.FormSystemMatrix(ess_tdof_list_fake, Mass); 
-    // kx.FormSystemMatrix(ess_tdof_list_fake, Kx); 
-    // ky.FormSystemMatrix(ess_tdof_list_fake, Ky);
- 
+
+
+
+    // ---------- Generation of curl matrixes -----------------
+    std::cout << "test" << std::endl;
+    HypreParMatrix *test;
+    ParDiscreteLinearOperator curl(fespace, fespace_E);
+    CurlCustomCoefficient grad_phi_i(&Hn);
+    curl.AddDomainInterpolator(new VectorScalarProductInterpolator(grad_phi_i));
+
+    curl.Assemble();
+    curl.Finalize();
+    curl.PrintMatlab(std::cout);
+    std::cout << curl.Height() << ", " << curl.Width() << std::endl;
+
+    // SparseMatrix Cx(Hn.Size(), Hn.Size()); SparseMatrix Cy(Hn.Size(), Hn.Size());
+    // GridFunction grad_phi_x(fespace);          Vector grad_phi_y(Hn.Size());
+    // GridFunction curl_phi(fespace_E);
+
+    // for (int i = 0; i<Hn.Size(); i++) {
+    //     Pn = 0;
+    //     Pn(i) = 1;
+    //     CurlCustomCoefficient grad_phi_i(&Pn);
+    //     // GradientGridFunctionCoefficient grad_phi_i(&Pn);
+    //     curl_phi.ProjectCoefficient(grad_phi_i);
+    //     std::cout << "Constructing curl matrixes : " << 100*(real_t)i/Hn.Size() << "%" << std::endl;
+    //     for (int j = 0; j<Hn.Size(); j++) {
+            
+    //         grad_phi_x(i) = curl_phi(i);
+    //         if (curl_phi(j) != 0) {
+    //             Cx.Add(j, i, curl_phi(j));
+    //         }
+    //         if (curl_phi(j+Hn.Size()) != 0) {
+    //             Cy.Add(j, i, curl_phi(j+Hn.Size()));
+    //         }
+    //     }
+    // }
+    // std::cout << "test" << std::endl;
+    // ----------------------------------------------------------
+
 
     
     // File for saving the values of the power and flux for each iterations
@@ -801,7 +807,7 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
         sout.open(vishost, visport);
         sout << "parallel " << num_procs << " " << myid << "\n";
         sout.precision(8);
-        sout << "solution\n" << pmesh << Hn << "\nkeys j\n" << std::flush;
+        sout << "solution\n" << pmesh << Jn << "\nkeys j\n" << std::flush;
 
     }
 
@@ -935,7 +941,16 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
         real_t flux = 0;
         real_t P_eddy = 0;
         real_t flux_test = 0;
+        
 
+        // Cx.Mult(Hn, Jnx);
+        // Cy.Mult(Hn, Jny);
+        // for (int i = 0; i<Hn.Size(); i++) {
+        //     Jn(i) = Jnx(i);
+        //     Jn(i + Hn.Size()) = Jny(i);
+        // }
+
+        curl.Mult(Hn, Jn);
 
         data_file << t << ";" << P_eddy << ";" << flux << ";" << NI_func(t) <<";" << flux_test << std::endl;
 
@@ -957,7 +972,7 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
                 // std::cout << Cx.Height() << std::endl;
                 sout.precision(8);
                 sout << "solution\n"
-                     << pmesh << Jnx_test
+                     << pmesh << Jn
                      << "window_title 'Champ H'"
                      << std::flush;
                 std::cin.get();
@@ -987,42 +1002,42 @@ real_t PowerLossCoefficient_TD::Eval(ElementTransformation &T,
 
 
 
-void ComputeCurl(const mfem::HypreParMatrix& Mass,
-                           const mfem::HypreParMatrix& Kx,
-                           CAROM::Matrix& C) // Output: dense, local
-{
-    const int n = Mass.NumRows();
-    const int m = Kx.NumCols();
+// void ComputeCurl(const mfem::HypreParMatrix& Mass,
+//                            const mfem::HypreParMatrix& Kx,
+//                            CAROM::Matrix& C) // Output: dense, local
+// {
+//     const int n = Mass.NumRows();
+//     const int m = Kx.NumCols();
 
-    MFEM_VERIFY(Kx.NumRows() == n && C.numRows() == n && C.numColumns() == m,
-                "Dimensions incompatibles entre Mass, Kx et C.");
+//     MFEM_VERIFY(Kx.NumRows() == n && C.numRows() == n && C.numColumns() == m,
+//                 "Dimensions incompatibles entre Mass, Kx et C.");
 
-    // Setup solveur
-    mfem::CGSolver solver(MPI_COMM_WORLD);
-    mfem::HypreBoomerAMG amg(Mass); // Préconditionneur
-    solver.SetOperator(Mass);
-    solver.SetPreconditioner(amg);
-    solver.SetRelTol(1e-10);
-    solver.SetMaxIter(500);
-    solver.SetPrintLevel(0);
+//     // Setup solveur
+//     mfem::CGSolver solver(MPI_COMM_WORLD);
+//     mfem::HypreBoomerAMG amg(Mass); // Préconditionneur
+//     solver.SetOperator(Mass);
+//     solver.SetPreconditioner(amg);
+//     solver.SetRelTol(1e-10);
+//     solver.SetMaxIter(500);
+//     solver.SetPrintLevel(0);
 
-    // Vecteurs de travail
-    mfem::Vector ej(m);      // base canonique
-    mfem::Vector Kxej(n);    // Kx * ej
-    mfem::Vector xj(n);      // solution M^{-1} * Kxej
+//     // Vecteurs de travail
+//     mfem::Vector ej(m);      // base canonique
+//     mfem::Vector Kxej(n);    // Kx * ej
+//     mfem::Vector xj(n);      // solution M^{-1} * Kxej
 
-    for (int j = 0; j < m; ++j)
-    {
-        ej = 0.0;
-        ej[j] = 1.0;
+//     for (int j = 0; j < m; ++j)
+//     {
+//         ej = 0.0;
+//         ej[j] = 1.0;
 
-        Kx.Mult(ej, Kxej);     // j-ième colonne de Kx
-        solver.Mult(Kxej, xj); // xj = M^{-1} * Kxej
+//         Kx.Mult(ej, Kxej);     // j-ième colonne de Kx
+//         solver.Mult(Kxej, xj); // xj = M^{-1} * Kxej
 
-        // Stockage dans C
-        for (int i = 0; i < n; ++i)
-        {
-            C(i, j) = xj[i];
-        }
-    }
-}
+//         // Stockage dans C
+//         for (int i = 0; i < n; ++i)
+//         {
+//             C(i, j) = xj[i];
+//         }
+//     }
+// }
