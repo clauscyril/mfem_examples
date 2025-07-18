@@ -4,13 +4,102 @@
 #include "mfem/Utilities.hpp"
 #include <iostream>
 #include <cmath>
-#include <unordered_set>
+#include <chrono>
+
 
 using namespace mfem;
 
 #ifndef M_PI 
 #define M_PI 3.14159265358979323846 
 #endif
+
+void CustomCurlInterpolatorX::AssembleElementMatrix2(const FiniteElement &h1_fe,
+                            const FiniteElement &out_fe,
+                            ElementTransformation &Trans,
+                            DenseMatrix &elmat)
+{
+    const int dof = h1_fe.GetDof();
+    const int dof_out = out_fe.GetDof(); 
+    const int dim = out_fe.GetDim();  // 2
+    DenseMatrix dshape(dof, dim);
+    DenseMatrix dshapedxt(dof, dim);
+    DenseMatrix invdfdx(dim, dim);
+    
+
+    elmat.SetSize(dof_out, dof);
+
+    for (int i = 0; i < dof_out; i++)
+    {
+        const IntegrationPoint &ip = h1_fe.GetNodes().IntPoint(i);
+        Trans.SetIntPoint(&ip);
+
+        Vector phys(Trans.GetSpaceDim());      // (r,z) in the element's reference
+        Trans.Transform(ip, phys);             // phys = (r,z) of the physical space 
+        h1_fe.CalcDShape(ip, dshape);          // Gradient of all shape function of the element in the element's space
+        CalcAdjugate(Trans.Jacobian(), invdfdx); 
+        Mult(dshape, invdfdx, dshapedxt);      // Computing the gradient in the physical space
+
+        real_t w = 1.;      
+        // H1 space (not weighted by the volume of the element), thus we need to remove the weihting of the volume of the element
+        if (out_fe.GetMapType() == FiniteElement::VALUE)  
+        {
+            Trans.SetIntPoint(&ip); 
+            w /= Trans.Weight();
+        }
+
+        for (int j = 0; j < dof; j++)  // Looping the gradient of the shape functions at the coordinates of the dof i   
+        {
+            // If the dof has not been computed yet by an other element, we apply the value -dh/dz, else 0 
+            // The best approach would be to compute the average of the contribution of the elements and not only one
+            elmat(i, j) = (set.find(phys(0)+ 100* phys(1)) != set.end() ? 0 : -dshapedxt(j, 1) * w);
+        }
+        // Very simple "hash function" Could be improved to guarantee the unicity
+        set.insert(phys(0)+ 100* phys(1));  // Add the 'dof' to the set
+    }
+}
+
+
+void CustomCurlInterpolatorY::AssembleElementMatrix2(const FiniteElement &h1_fe,
+                            const FiniteElement &out_fe,
+                            ElementTransformation &Trans,
+                            DenseMatrix &elmat)
+{
+const int dof = h1_fe.GetDof();
+    const int dof_out = out_fe.GetDof(); 
+    const int dim = out_fe.GetDim();  // 2
+    DenseMatrix dshape(dof, dim);
+    DenseMatrix dshapedxt(dof, dim);
+    DenseMatrix invdfdx(dim, dim);
+    
+
+    elmat.SetSize(dof_out, dof);
+
+    for (int i = 0; i < dof_out; i++)
+    {
+        const IntegrationPoint &ip = h1_fe.GetNodes().IntPoint(i);
+        Trans.SetIntPoint(&ip);
+        Vector phys(Trans.GetSpaceDim());    // (x,y)
+        Trans.Transform(ip, phys);           // phys = (x,y)
+        h1_fe.CalcDShape(ip, dshape); // Gradient dans l'espace physique
+        CalcAdjugate(Trans.Jacobian(), invdfdx);
+        Mult(dshape, invdfdx, dshapedxt);
+
+        real_t w = 1.;
+        if (out_fe.GetMapType() == FiniteElement::VALUE)
+        {
+            Trans.SetIntPoint(&ip);
+            w /= Trans.Weight();
+        }
+        for (int j = 0; j < dof; j++)
+        {
+            elmat(i, j) = (set.find(phys(0)+ 100* phys(1)) != set.end() ? 0 : (i==j ? dshapedxt(j, 0) * w + 1/phys(0) : dshapedxt(j, 0) * w));
+        }
+        set.insert(phys(0)+ 100* phys(1)); // "Hash" key to identify the dof globaly
+        // std::cout << set.size() << std::endl;
+
+    }
+}
+
 
 void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization, bool save_snapshot){
 
@@ -83,10 +172,12 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     };
     
 
-    FiniteElementCollection *fec = new H1_FECollection(order, dim); 
+    FiniteElementCollection *fec = new H1_FECollection(order, dim);
+    // FiniteElementCollection *fecL2 = new L2_FECollection(order, dim); 
+    FiniteElementCollection *fec_E = new ND_FECollection(order, dim); 
     ParFiniteElementSpace *fespace = new ParFiniteElementSpace(&pmesh, fec);
     ParFiniteElementSpace *fespace_E = new ParFiniteElementSpace(&pmesh, fec, dim);
-
+    // ParFiniteElementSpace *fespace_E = new ParFiniteElementSpace(&pmesh, fec_E);
     HYPRE_Int size = fespace->GlobalTrueVSize();
     if (myid == 0)
     {
@@ -416,7 +507,7 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
                      << std::flush;
                 sout_e << "solution\n" << pmesh << En <<  "window_title 'Champ E'" << std::flush;
                 sout_j << "solution\n" << pmesh << Jn <<  "window_title 'Courant J'" << std::flush;
-                sout_b << "solution\n" << pmesh << Jn_x <<  "window_title 'Field B'" << std::flush;
+                sout_b << "solution\n" << pmesh << Pn <<  "window_title 'Field B'" << std::flush;
 
                 // std::cin.get(); // Décommenter pour pause manuelle
             }
@@ -510,8 +601,12 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
 
 
     FiniteElementCollection *fec = new H1_FECollection(order, dim); 
+    // FiniteElementCollection *fecL2 = new L2_FECollection(order, dim);
+    FiniteElementCollection *fec_E = new ND_FECollection(order, dim); 
     ParFiniteElementSpace *fespace = new ParFiniteElementSpace(&pmesh, fec);
+    // ParFiniteElementSpace *fespaceL2 = new ParFiniteElementSpace(&pmesh, fecL2);
     ParFiniteElementSpace *fespace_E = new ParFiniteElementSpace(&pmesh, fec, dim);
+    // ParFiniteElementSpace *fespace_E = new ParFiniteElementSpace(&pmesh, fec_E);
 
     HYPRE_Int size = fespace->GlobalTrueVSize();
 
@@ -525,6 +620,8 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     ParGridFunction Bn(fespace);
 
     ParGridFunction En(fespace_E);
+    ParGridFunction Enx(fespace);     // Pn
+    ParGridFunction Eny(fespace);     // Pn
     ParGridFunction Enm1(fespace_E);
 
     ParGridFunction Jn(fespace_E);
@@ -628,41 +725,29 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
 
 
 
+    auto inv_r_y_func = [](const Vector &x, Vector &A){
+        A[0] = 1./x[0];
+    };
+
+
     // ---------- Generation of curl matrixes -----------------
-    std::cout << "test" << std::endl;
-    HypreParMatrix *test;
-    ParDiscreteLinearOperator curl(fespace, fespace_E);
-    CurlCustomCoefficient grad_phi_i(&Hn);
-    curl.AddDomainInterpolator(new VectorScalarProductInterpolator(grad_phi_i));
 
-    curl.Assemble();
-    curl.Finalize();
-    curl.PrintMatlab(std::cout);
-    std::cout << curl.Height() << ", " << curl.Width() << std::endl;
+    ParDiscreteLinearOperator curlx(fespace, fespace);
+    curlx.AddDomainInterpolator(new CustomCurlInterpolatorX());
+    curlx.Assemble();
+    curlx.Finalize();
+    std::cout << curlx.Height() << ", " << curlx.Width() << std::endl;
+    HypreParMatrix *Cx = curlx.ParallelAssemble();
+    std::cout << "Cx hypre matrix size:" << Cx->Height() << std::endl;
 
-    // SparseMatrix Cx(Hn.Size(), Hn.Size()); SparseMatrix Cy(Hn.Size(), Hn.Size());
-    // GridFunction grad_phi_x(fespace);          Vector grad_phi_y(Hn.Size());
-    // GridFunction curl_phi(fespace_E);
+    ParDiscreteLinearOperator curly(fespace, fespace);
+    curly.AddDomainInterpolator(new CustomCurlInterpolatorY());
+    curly.Assemble();
+    curly.Finalize();
+    std::cout << curly.Height() << ", " << curly.Width() << std::endl;
+    HypreParMatrix *Cy = curly.ParallelAssemble();
+    std::cout << "Cy hypre matrix size :" << Cy->Height() << std::endl;
 
-    // for (int i = 0; i<Hn.Size(); i++) {
-    //     Pn = 0;
-    //     Pn(i) = 1;
-    //     CurlCustomCoefficient grad_phi_i(&Pn);
-    //     // GradientGridFunctionCoefficient grad_phi_i(&Pn);
-    //     curl_phi.ProjectCoefficient(grad_phi_i);
-    //     std::cout << "Constructing curl matrixes : " << 100*(real_t)i/Hn.Size() << "%" << std::endl;
-    //     for (int j = 0; j<Hn.Size(); j++) {
-            
-    //         grad_phi_x(i) = curl_phi(i);
-    //         if (curl_phi(j) != 0) {
-    //             Cx.Add(j, i, curl_phi(j));
-    //         }
-    //         if (curl_phi(j+Hn.Size()) != 0) {
-    //             Cy.Add(j, i, curl_phi(j+Hn.Size()));
-    //         }
-    //     }
-    // }
-    // std::cout << "test" << std::endl;
     // ----------------------------------------------------------
 
 
@@ -724,8 +809,8 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     CAROM::Matrix invReducedA(numColumnRB, numColumnRB, false);
     CAROM::Matrix ReducedR2(numColumnRB, numColumnRB, false);
     CAROM::Matrix ReducedM(numColumnRB, numColumnRB, false);
-    // CAROM::Matrix ReducedCx(numColumnRB, numColumnRB, false);
-    // CAROM::Matrix ReducedCy(numColumnRB, numColumnRB, false);
+    CAROM::Matrix ReducedCx(numColumnRB, numColumnRB, false);
+    CAROM::Matrix ReducedCy(numColumnRB, numColumnRB, false);
 
 
     // CAROM::Matrix Cx_Carom(Hn.Size(), Hn.Size(), false);
@@ -741,22 +826,18 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     invReducedA.print("data/A_inv");
     ReducedA.print("data/A");
 
-    // ComputeCurl(Mass, Kx, Cx_Carom);
-    // ComputeCurl(Mass, Ky, Cy_Carom);
-
-    // Cy_Carom.print("data/reduced/test_Cy");
-    // ComputeCtAB(Cx_Carom, *spatialbasis, *spatialbasis, ReducedA);    // Reduced A = phi^t * A * phi
-    // ComputeCtAB(A, *spatialbasis, *spatialbasis, invReducedA); // inverse of Reduced A 
+    ComputeCtAB(*Cx, *spatialbasis, *spatialbasisEx, ReducedCx);
+    ComputeCtAB(*Cy, *spatialbasis, *spatialbasisEy, ReducedCy);
 
     CAROM::Vector B_carom(B.GetData(), B.Size(), true, false);  // B Compatible with libRom
     CAROM::Vector X_carom(X.GetData(), X.Size(), true, false);  // X Compatible with libRom 
     CAROM::Vector Bn_carom(Bn.GetData(), Bn.Size(), true, false);  // X Compatible with libRom
     
-    // CAROM::Vector Ex_carom(zero_vector.GetData(), zero_vector.Size(), true, false);  //
-    // CAROM::Vector Ey_carom(zero_vector.GetData(), zero_vector.Size(), true, false);
+    CAROM::Vector Ex_carom(Enx.GetData(), Enx.Size(), true, false);  //
+    CAROM::Vector Ey_carom(Eny.GetData(), Eny.Size(), true, false);
 
-    // CAROM::Vector jx_carom(zero_vector.GetData(), zero_vector.Size(), true, false);  
-    // CAROM::Vector jy_carom(zero_vector.GetData(), zero_vector.Size(), true, false);
+    CAROM::Vector jx_carom(Jnx.GetData(), Jnx.Size(), true, false);  
+    CAROM::Vector jy_carom(Jny.GetData(), Jny.Size(), true, false);
 
     std::unique_ptr<CAROM::Vector> reducedRHS = spatialbasis->transposeMult(B_carom); // Reduced version of B : phi^T*B
 
@@ -773,30 +854,27 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     CAROM::Vector reducedBdtn(numColumnRB, false);
     reducedBdtn = 0;
 
-    // CAROM::Vector reducedEx(numColumnRB, false);
-    // reducedEx = 0;
-    // CAROM::Vector reducedEy(numColumnRB, false);
-    // reducedEy = 0;
 
-    // CAROM::Vector reducedExnm1(numColumnRB, false);
-    // reducedExnm1 = 0;
-    // CAROM::Vector reducedEynm1(numColumnRB, false);
-    // reducedEynm1 = 0;
+    CAROM::Vector reducedEx(numColumnRB, false);
+    reducedEx = 0;
+    CAROM::Vector reducedEy(numColumnRB, false);
+    reducedEy = 0;
 
-    // CAROM::Vector reducedJxnm1(numColumnRB, false);
-    // reducedJxnm1 = 0;
-    // CAROM::Vector reducedJynm1(numColumnRB, false);
-    // reducedJynm1 = 0;
+    CAROM::Vector reducedExnm1(numColumnRB, false);
+    reducedExnm1 = 0;
+    CAROM::Vector reducedEynm1(numColumnRB, false);
+    reducedEynm1 = 0;
 
-
-
+    CAROM::Vector reducedJxnm1(numColumnRB, false);
+    reducedJxnm1 = 0;
+    CAROM::Vector reducedJynm1(numColumnRB, false);
+    reducedJynm1 = 0;
 
     assembleTimer.Stop();
 
     std::cout << "Number of dof : " << fespace->GetNDofs() << std::endl;
     std::cout << "VSize : " << fespace->GetTrueVSize() << std::endl;
 
- 
     socketstream sout;
 
     char vishost[] = "localhost";
@@ -807,12 +885,18 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
         sout.open(vishost, visport);
         sout << "parallel " << num_procs << " " << myid << "\n";
         sout.precision(8);
-        sout << "solution\n" << pmesh << Jn << "\nkeys j\n" << std::flush;
+        sout << "solution\n" << pmesh << Pn << "\nkeys j\n" << std::flush;
 
     }
 
 
     int vis_steps = 10;  // Number of iterations between two visualizations
+    solveTimer.Restart();
+    solveTimer.Start();
+
+    auto t0 = std::chrono::high_resolution_clock::now();
+
+
     for (int step = 0; step < num_steps; step++)
     {   
         iter++;
@@ -867,30 +951,30 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
         reducedBnm1 = reducedBn;
 
 
-        // std::unique_ptr<CAROM::Vector> reduced_Jx = ReducedCx.mult(reducedHn);
-        // std::unique_ptr<CAROM::Vector> reduced_Jy = ReducedCy.mult(reducedHn);
+        std::unique_ptr<CAROM::Vector> reduced_Jx = ReducedCx.mult(reducedHn);
+        std::unique_ptr<CAROM::Vector> reduced_Jy = ReducedCy.mult(reducedHn);
 
-        // reducedExnm1 *= A3;
-        // reducedJxnm1 *= A2;
-        // *reduced_Jx *= A1;
-        // reducedEx = *reduced_Jx;
-        // reducedEx += reducedJxnm1;
-        // reducedEx += reducedExnm1;
+        reducedExnm1 *= A3;
+        reducedJxnm1 *= A2;
+        *reduced_Jx *= A1;
+        reducedEx = *reduced_Jx;
+        reducedEx += reducedJxnm1;
+        reducedEx += reducedExnm1;
 
-        // reducedEynm1 *= A3;
-        // reducedJynm1 *= A2;
-        // *reduced_Jy *= A1;
-        // reducedEy = *reduced_Jy;
-        // reducedEy += reducedJynm1;
-        // reducedEy += reducedEynm1;
+        reducedEynm1 *= A3;
+        reducedJynm1 *= A2;
+        *reduced_Jy *= A1;
+        reducedEy = *reduced_Jy;
+        reducedEy += reducedJynm1;
+        reducedEy += reducedEynm1;
 
-        // *reduced_Jx *= 1/A1;
-        // *reduced_Jy *= 1/A1;
+        *reduced_Jx *= 1/A1;
+        *reduced_Jy *= 1/A1;
         
-        // reducedJxnm1 = *reduced_Jx;
-        // reducedJynm1 = *reduced_Jy;
-        // reducedExnm1 = reducedEx;
-        // reducedEynm1 = reducedEy;
+        reducedJxnm1 = *reduced_Jx;
+        reducedJynm1 = *reduced_Jy;
+        reducedExnm1 = reducedEx;
+        reducedEynm1 = reducedEy;
 
         /*
         Jn_temp = Jn;
@@ -905,74 +989,75 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
 
         spatialbasis->mult(reducedHn, X_carom);  // Getting full version of Hn in X_carom (compatible libRom)
         spatialbasis->mult(reducedBn, Bn_carom);  // Getting full version of Hn in X_carom (compatible libRom)
-        // spatialbasisEx->mult(*reduced_Jx, jx_carom);
-        // spatialbasisEy->mult(*reduced_Jy, jy_carom);
-        // spatialbasisEx->mult(reducedEx, Ex_carom);
-        // spatialbasisEy->mult(reducedEy, Ey_carom);
+        spatialbasisEx->mult(*reduced_Jx, jx_carom);
+        spatialbasisEy->mult(*reduced_Jy, jy_carom);
+        spatialbasisEx->mult(reducedEx, Ex_carom);
+        spatialbasisEy->mult(reducedEy, Ey_carom);
 
         for (int i = 0; i<Hn.Size(); i++){       
             Hn(i) = X_carom(i);                  // Getting Hn in a mfem::Vector
             Bn(i) = Bn_carom(i);
-            // Pn(i) = jx_carom(i) * Ex_carom(i) + jy_carom(i) * Ey_carom(i);
+            Pn(i) = jx_carom(i) * Ex_carom(i) + jy_carom(i) * Ey_carom(i);
             // Jnx(i) = jx_carom(i);
+            Jn(i) = jx_carom(i);
+            // Jnx(i) = jx_carom(i); // No need as data are shared 
+            // Jny(i) = jy_carom(i);
+            En(i) = Ex_carom(i);
+            En(i + Hn.Size()) = Ey_carom(i);
+            
+            Jn(i + Hn.Size()) = jy_carom(i);
         }
 
 
         Hn.ProjectBdrCoefficient(bdr_coeff, dir_bdr);  // Ensuring bdr conditions (may not be necessary)
 
-        // // ***** computation of magnetic flux ***********
-        // GridFunctionCoefficient B_coeff(&Bn);
-        // GridFunction one(fespace);
-        // one = 1;
-        // LinearForm lf_flux(fespace);
-        // lf_flux.AddDomainIntegrator(new DomainLFIntegrator(B_coeff));
-        // lf_flux.Assemble();
+        // ***** computation of magnetic flux ***********
+        GridFunctionCoefficient B_coeff(&Bn);
+        GridFunction one(fespace);
+        one = 1;
+        LinearForm lf_flux(fespace);
+        lf_flux.AddDomainIntegrator(new DomainLFIntegrator(B_coeff));
+        lf_flux.Assemble();
 
-        // real_t flux = lf_flux(one);
+        real_t flux = lf_flux(one);
 
-        // GridFunctionCoefficient P_eddy_coeff(&Pn);
-        // LinearForm lf(fespace);
-        // lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
-        // lf.Assemble();
-        // real_t P_eddy_tot = 2*M_PI*lf(one);
-        // real_t vol = M_PI * height * (Rout*Rout - Ri*Ri);
-        // real_t P_eddy = P_eddy_tot/vol;
+        GridFunctionCoefficient P_eddy_coeff(&Pn);
+        ProductCoefficient P_eddy_r(P_eddy_coeff, r_coeff);
+        LinearForm lf(fespace);
+        lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_r));
+        lf.Assemble();
+        real_t P_eddy_tot = 2*M_PI*lf(one);
+        real_t vol = M_PI * height * (Rout*Rout - Ri*Ri);
+        real_t P_eddy = P_eddy_tot/vol;
 
-        real_t flux = 0;
-        real_t P_eddy = 0;
+
         real_t flux_test = 0;
+
+
+
+
         
-
-        // Cx.Mult(Hn, Jnx);
-        // Cy.Mult(Hn, Jny);
-        // for (int i = 0; i<Hn.Size(); i++) {
-        //     Jn(i) = Jnx(i);
-        //     Jn(i + Hn.Size()) = Jny(i);
-        // }
-
-        curl.Mult(Hn, Jn);
-
+        
+        // Jn = 1;
         data_file << t << ";" << P_eddy << ";" << flux << ";" << NI_func(t) <<";" << flux_test << std::endl;
 
 
-
+        // Jnx = 0;
+        // Jnx(76) = 1;
 
         if (step % vis_steps == 0 )
         {       
             std::cout << "Time step: " << step << ", Time: " << t << std::endl;
             string name = "data/reduced/Hn_reduced_"+to_string(step);  
             X_carom.print(name.c_str());
-            // Vector lf_vect = lf;
-            // for (int i = 0; i<50; i++){
-            //     std::cout << lf_carom(i) << std::endl;
-            // }
             if (visualization)
             {
+                // Jn.Print(std::cout);
                 // Cy.Mult(Hn, Jnx_test);
                 // std::cout << Cx.Height() << std::endl;
                 sout.precision(8);
                 sout << "solution\n"
-                     << pmesh << Jn
+                     << pmesh << Pn
                      << "window_title 'Champ H'"
                      << std::flush;
                 std::cin.get();
@@ -980,8 +1065,14 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
             
         }
     }
+    // solveTimer.Stop();
+    // std::cout << "Solve time ROM = " << solveTimer.RealTime() << std::endl;
+    // printf("Elapsed time for solving FOM: %e second\n", solveTimer.RealTime());
+    
+    auto t1 = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> dt = t1 - t0;
+    std::cout << "Elapsed time for solving ROM: " <<  dt.count() << " s\n";
 }
-
 
 
 PowerLossCoefficient_TD::PowerLossCoefficient_TD(const FiniteElementSpace *fespace_, CurlCustomCoefficient &J_, VectorGridFunctionCoefficient &E_)
@@ -998,46 +1089,3 @@ real_t PowerLossCoefficient_TD::Eval(ElementTransformation &T,
     E.Eval(E_vect, T, ip);    // same for E
     return  (J_vect*E_vect) * x[0];  // J.E * r (Cylindrical coordinates)
 }
-
-
-
-
-// void ComputeCurl(const mfem::HypreParMatrix& Mass,
-//                            const mfem::HypreParMatrix& Kx,
-//                            CAROM::Matrix& C) // Output: dense, local
-// {
-//     const int n = Mass.NumRows();
-//     const int m = Kx.NumCols();
-
-//     MFEM_VERIFY(Kx.NumRows() == n && C.numRows() == n && C.numColumns() == m,
-//                 "Dimensions incompatibles entre Mass, Kx et C.");
-
-//     // Setup solveur
-//     mfem::CGSolver solver(MPI_COMM_WORLD);
-//     mfem::HypreBoomerAMG amg(Mass); // Préconditionneur
-//     solver.SetOperator(Mass);
-//     solver.SetPreconditioner(amg);
-//     solver.SetRelTol(1e-10);
-//     solver.SetMaxIter(500);
-//     solver.SetPrintLevel(0);
-
-//     // Vecteurs de travail
-//     mfem::Vector ej(m);      // base canonique
-//     mfem::Vector Kxej(n);    // Kx * ej
-//     mfem::Vector xj(n);      // solution M^{-1} * Kxej
-
-//     for (int j = 0; j < m; ++j)
-//     {
-//         ej = 0.0;
-//         ej[j] = 1.0;
-
-//         Kx.Mult(ej, Kxej);     // j-ième colonne de Kx
-//         solver.Mult(Kxej, xj); // xj = M^{-1} * Kxej
-
-//         // Stockage dans C
-//         for (int i = 0; i < n; ++i)
-//         {
-//             C(i, j) = xj[i];
-//         }
-//     }
-// }

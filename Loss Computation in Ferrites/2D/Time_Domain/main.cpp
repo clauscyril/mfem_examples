@@ -27,7 +27,7 @@ int main() {
     // real_t I_rms = 0.082348/sqrt(2);
     real_t f = 400e3;
     real_t I_rms = 0.082/sqrt(2);
-    int nb_period = 4;
+    int nb_period = 3;
     int nb_iter = 1000 * nb_period;
     real_t Ts = nb_period/f/nb_iter;
 
@@ -136,7 +136,7 @@ int main() {
     };
 
     // TD_sim(mesh, NI_sine_func, t_f, nb_iter, N30, false);
-    TD_sim_by_flux(mesh, phi_saw_func, t_f, nb_iter, N87, true);
+    TD_sim_by_flux(mesh, phi_saw_func, t_f, nb_iter, N30, false);
 
 
     return 0;

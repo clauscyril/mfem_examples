@@ -26,12 +26,12 @@ int main(int argc, char *argv[])
     const char *mesh_file = "C:/Users/cyril/Projets/mfem_examples/Loss Computation in Ferrites/mesh/square.msh";
 
     Mesh mesh(mesh_file,1,1);
-    // mesh.UniformRefinement();
-    // mesh.UniformRefinement();
-    // mesh.UniformRefinement();
+    mesh.UniformRefinement();
+    mesh.UniformRefinement();
+    mesh.UniformRefinement();
 
     // Fonction source (Courant dans la bobine sous forme de condition aux limites)
-    real_t f = 200e3;
+    real_t f = 800e3;
     real_t I_rms = 0.082/sqrt(2);
     int nb_period = 3;
     int nb_iter = 100 * nb_period;
@@ -62,9 +62,9 @@ int main(int argc, char *argv[])
             return I_rms * std::sqrt(2) * (nb_iter/nb_period - rest) * Ts;
     };
 
-    // TD_sim_offline(mesh, NI_sine_func, t_f, nb_iter, N30, false, true);
+    TD_sim_offline(mesh, NI_sine_func, t_f, nb_iter, N30, false, false);
     // std::cout << "test" << std::endl;
-    TD_sim_online(mesh, NI_sine_func, t_f, nb_iter, N30, true);
+    // TD_sim_online(mesh, NI_sine_func, t_f, nb_iter, N30, false);
 
     return 0;
 }
