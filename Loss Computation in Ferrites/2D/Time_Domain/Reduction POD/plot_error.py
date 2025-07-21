@@ -11,20 +11,20 @@ path = os.path.join(path, "build", "data")
 
 errors = []
 
-for el in steps :
-    step = str(int(el))
-    path_fom = os.path.join(path, "fom", "Hn_"+step+"0.csv")
-    path_rom = os.path.join(path, "reduced", "Hn_reduced_"+step+"0")
+# for el in steps :
+#     step = str(int(el))
+#     path_fom = os.path.join(path, "fom", "Hn_"+step+"0.csv")
+#     path_rom = os.path.join(path, "reduced", "Hn_reduced_"+step+"0")
 
-    data_fom = pd.read_csv(path_fom)
-    Hn_fom = data_fom['Hn']
+#     data_fom = pd.read_csv(path_fom)
+#     Hn_fom = data_fom['Hn']
 
-    data_rom = pd.read_csv(path_rom, header=None)
-    Hn_rom = data_rom[0]
-    diff = Hn_fom - Hn_rom
-    error = np.linalg.norm(diff)
-    error_ref = np.linalg.norm(Hn_fom)
-    errors.append(error/error_ref)
+#     data_rom = pd.read_csv(path_rom, header=None)
+#     Hn_rom = data_rom[0]
+#     diff = Hn_fom - Hn_rom
+#     error = np.linalg.norm(diff)
+#     error_ref = np.linalg.norm(Hn_fom)
+#     errors.append(error/error_ref)
 
 
 path_fom = os.path.join(path, "fom", "TD_0.csv")
@@ -38,26 +38,31 @@ print(data_rom)
 flux_fom = data_fom["flux"]
 flux_rom = data_rom["flux"]
 flux_rom_reduced = data_rom['flux_reduced']
-diff_flux = flux_fom - flux_rom
+diff_flux = flux_fom - flux_rom_reduced
 
 
 p_eddy_fom = data_fom["p_eddy"]
-p_eddy_rom = data_rom["p_eddy"] 
+p_eddy_rom = data_rom["p_eddy"]
+p_eddy_rom_reduced = data_rom["p_eddy_reduced"]  
 
+# alpha = 1.4
+# p_eddy_rom_reduced = p_eddy_rom_reduced * alpha
+
+power_error = abs(p_eddy_rom - p_eddy_fom)/max(p_eddy_rom)
 
 t = data_rom['t']
 
 
-plt.plot(errors)
-plt.title("Relative Error between Fom and Rom")
-plt.xlabel("Iteration")
-plt.ylabel("Relative error")
-plt.grid()
+# plt.plot(errors)
+# plt.title("Relative Error between Fom and Rom")
+# plt.xlabel("Iteration")
+# plt.ylabel("Relative error")
+# plt.grid()
 
 plt.figure()
 
-plt.plot(t, flux_rom, label="Flux Rom")
-# plt.plot(t, flux_rom_reduced, label="Flux Rom reduced")
+# plt.plot(t, flux_rom, label="Flux Rom")
+plt.plot(t, flux_rom_reduced, label="Flux Rom reduced")
 plt.plot(t, flux_fom,"--", label="Flux FOM")
 plt.grid()
 plt.xlabel("Time (s)")
@@ -75,11 +80,21 @@ plt.legend()
 plt.figure()
 
 plt.plot(t, p_eddy_rom, label="Power Rom")
-plt.plot(t, p_eddy_fom, label="Power FOM")
+plt.plot(t, p_eddy_rom_reduced, label="Power Rom Reduced ")
+plt.plot(t, p_eddy_fom, '--', label="Power FOM")
 plt.grid()
 plt.xlabel("Time (s)")
 plt.ylabel("Eddy Current losses (W/m3))")
 plt.legend()
+
+
+plt.figure()
+plt.plot(t, power_error , label="Power difference")
+plt.grid()
+plt.xlabel("Time (s)")
+plt.ylabel("Eddy Current losses (W/m3))")
+plt.legend()
+
 
 
 plt.show()
