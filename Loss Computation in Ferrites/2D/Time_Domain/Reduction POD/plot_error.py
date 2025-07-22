@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
-steps = np.linspace(0,290,30)
+steps = np.linspace(0,990,100)
 
 path = os.path.dirname(os.path.abspath(__file__))
 path = os.path.join(path, "build", "data")
@@ -37,21 +37,21 @@ print(data_rom)
 
 flux_fom = data_fom["flux"]
 flux_rom = data_rom["flux"]
-flux_rom_reduced = data_rom['flux_reduced']
-diff_flux = flux_fom - flux_rom_reduced
+diff_flux = flux_fom - flux_rom
 
 
 p_eddy_fom = data_fom["p_eddy"]
-p_eddy_rom = data_rom["p_eddy"]
-p_eddy_rom_reduced = data_rom["p_eddy_reduced"]  
+p_eddy_rom = data_rom["p_eddy"] 
 
 # alpha = 1.4
 # p_eddy_rom_reduced = p_eddy_rom_reduced * alpha
 
-power_error = abs(p_eddy_rom - p_eddy_fom)/max(p_eddy_rom)
+power_error = abs(p_eddy_rom - p_eddy_fom)
 
 t = data_rom['t']
 
+print(f"Power Fom :  {np.mean(p_eddy_fom[200:])}")
+print(f"Power ROM reduced : {np.mean(p_eddy_rom[200:])}")
 
 # plt.plot(errors)
 # plt.title("Relative Error between Fom and Rom")
@@ -62,7 +62,7 @@ t = data_rom['t']
 plt.figure()
 
 # plt.plot(t, flux_rom, label="Flux Rom")
-plt.plot(t, flux_rom_reduced, label="Flux Rom reduced")
+plt.plot(t, flux_rom, label="Flux Rom reduced")
 plt.plot(t, flux_fom,"--", label="Flux FOM")
 plt.grid()
 plt.xlabel("Time (s)")
@@ -79,9 +79,9 @@ plt.legend()
 
 plt.figure()
 
-plt.plot(t, p_eddy_rom, label="Power Rom")
-plt.plot(t, p_eddy_rom_reduced, label="Power Rom Reduced ")
-plt.plot(t, p_eddy_fom, '--', label="Power FOM")
+# plt.plot(t, p_eddy_rom, 'black', label="Power Rom")
+plt.plot(t, p_eddy_rom, 'green', label="Power Rom Reduced ")
+plt.plot(t, p_eddy_fom, 'r-.', label="Power FOM")
 plt.grid()
 plt.xlabel("Time (s)")
 plt.ylabel("Eddy Current losses (W/m3))")
