@@ -137,7 +137,7 @@ void ComputeCtAB_Sparse(const mfem::SparseMatrix& A,
 
 
 
-void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization, bool save_snapshot){
+void TD_sim_offline(ParMesh &pmesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization, bool save_snapshot, int num_procs, int myid){
 
     // ****************** Parameters definitions *********************
     real_t Ts = t_f/(num_steps);    // Time step
@@ -186,17 +186,8 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
 
 
     int order = 2;                      // elements order : 2
-    int dim = mesh.Dimension();         // Mesh dimension : Here 2
+    int dim = pmesh.Dimension();         // Mesh dimension : Here 2
     int id = 0;                         // id of the main mpi rank
-
-    Mpi::Init();
-    int num_procs = Mpi::WorldSize();
-    int myid = Mpi::WorldRank();
-    Hypre::Init();
-
-
-    ParMesh pmesh(MPI_COMM_WORLD, mesh);
-    mesh.Clear();
 
     // Boundary conditions function
     auto bdr_func = [&](const Vector &x, real_t t) -> real_t
@@ -407,9 +398,9 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     lf_p.AddDomainIntegrator(new DomainLFIntegrator(ones));
     lf_p.Assemble();
 
-
+    std::cout << "Starting FOM Simulation : " << std::endl;
     auto t0 = std::chrono::high_resolution_clock::now();  // Time of the begining of the simulation
-    int vis_steps = 10;                                   // Number of iterations between two visualizations (if visualization)
+    int vis_steps = 100;                                   // Number of iterations between two visualizations (if visualization)
     // ***************  Time iterations *****************
     for (int step = 0; step < num_steps; step++)
     {   
@@ -544,10 +535,11 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
     }
     auto t1 = std::chrono::high_resolution_clock::now();  // Capture the time after the simulation
     std::chrono::duration<double> dt = t1 - t0;           // Get the duration of the simulation
-    std::cout << "Elapsed time for solving ROM: " <<  dt.count() << " s\n";
-    
+    std::cout << "Elapsed time for solving FOM: " <<  dt.count() << " s\n";
+    std::cout << "FOM Simulation has ended successfully." << std::endl;
     // Save the snaphots and generate the basis using SVD
     if (save_snapshot) {
+        std::cout << "Generating snapshots files : " << std::endl;
         generator->writeSnapshot();
         generatorEx->writeSnapshot();
         generatorEy->writeSnapshot();
@@ -555,15 +547,20 @@ void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, re
         generatorEx->endSamples();
         generatorEy->endSamples();
     }
-    delete generator;
-    delete options;
-    data_file.close();
-    Mpi::Finalize();
 
+    data_file.close();
+    // Free memory
+    delete generator;
+    delete generatorEx;
+    delete generatorEy;
+    delete options;
+    delete fespace_E;
+    delete fespace;
+    delete fec;
 }
 
-void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
-
+void TD_sim_online(ParMesh &pmesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization, int num_procs, int myid){
+    
     // ****************** Parameters definitions *********************
     real_t Ts = t_f/(num_steps);    // Time step
 
@@ -611,24 +608,9 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
 
 
     int order = 2;                      // elements order : 2
-    int dim = mesh.Dimension();         // Mesh dimension : Here 2
+    int dim = pmesh.Dimension();         // Mesh dimension : Here 2
     int id = 0;                         // id of the main mpi rank
 
-    Mpi::Init();
-    int num_procs = Mpi::WorldSize();
-    int myid = Mpi::WorldRank();
-    Hypre::Init();
-
-
-    ParMesh pmesh(MPI_COMM_WORLD, mesh);
-    mesh.Clear();
-
-    // // Boundary conditions function
-    // auto bdr_func = [&](const Vector &x, real_t t) -> real_t
-    // {
-    //     real_t r = x(0); // Accès au premier élément du vecteur x
-    //     return NI_func(t) / (2 * M_PI * r);
-    // };
 
     // Boundary conditions function
     auto inv_r_func = [&](const Vector &x, real_t t) -> real_t
@@ -692,12 +674,11 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     Hnm1 = 0;  
     db_dt = 0;
 
-    // Definition of the Boundary conditions  :
+    // Definition of the Boundary conditions :
     Array<int> ess_tdof_list;
     Array<int> dir_bdr(pmesh.bdr_attributes.Max());
     dir_bdr = 1; // All borders have Dirichlet boundary conditions (dbc)
     fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);  // Getting the list of degrees of freedom with dbc
-
 
     // FunctionCoefficient bdr_coeff([&](const Vector &x) { return bdr_func(x, t); });
     ConstantCoefficient zero_coeff(0.);
@@ -793,26 +774,21 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     curlx.AddDomainInterpolator(new CustomCurlInterpolatorX());
     curlx.Assemble();
     curlx.Finalize();
-    std::cout << curlx.Height() << ", " << curlx.Width() << std::endl;
     HypreParMatrix *Cx = curlx.ParallelAssemble();
-    std::cout << "Cx hypre matrix size:" << Cx->Height() << std::endl;
-
-
+    
     ParDiscreteLinearOperator curly(fespace, fespace);
     curly.AddDomainInterpolator(new CustomCurlInterpolatorY());
     curly.Assemble();
     curly.Finalize();
-    std::cout << curly.Height() << ", " << curly.Width() << std::endl;
     HypreParMatrix *Cy = curly.ParallelAssemble();
-    std::cout << "Cy hypre matrix size :" << Cy->Height() << std::endl;
+    
     // ----------------------------------------------------------
 
     
     // File for saving the values of the power and flux for each iterations
     std::string name = "./data/reduced/TD_" + std::to_string(1) + ".csv";   
     std::ofstream data_file(name);                         
-    data_file << "t;p_eddy;flux;NI\n0;0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
-
+    data_file << "t;p_eddy;flux;NI\n0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
 
 
     // ********* libROM parameters (For saving the snapshots for the reduced model) ****************
@@ -937,7 +913,7 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     }
 
 
-    int vis_steps = 10;  // Number of iterations between two visualizations
+    int vis_steps = 100;  // Number of iterations between two visualizations
     
     // The boundary condition is projected into the reduced space 
     CAROM::Vector B_carom_bdr(B.GetData(), B.Size(), true, true);  
@@ -1071,7 +1047,6 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
         if (step % vis_steps == 0)
         {       
             std::cout << "Time step: " << step << ", Time: " << t << std::endl;
-            string name = "data/reduced/Hn_reduced_"+to_string(step);  
             if (visualization)
             {
                 spatialbasis->mult(reducedHn, X_carom);
@@ -1109,6 +1084,12 @@ void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, rea
     auto t1 = std::chrono::high_resolution_clock::now();     // Capture time after the simulation
     std::chrono::duration<double> dt = t1 - t0;              // Duration of the simulation
     std::cout << "Elapsed time for solving ROM: " <<  dt.count() << " s\n";
+    std::cout << "ROM Simulation has ended succesfully." << std::endl;
+    delete fespace_E;
+    delete fespace;
+    delete fec;
+    delete Cx;
+    delete Cy;
 }
 
 

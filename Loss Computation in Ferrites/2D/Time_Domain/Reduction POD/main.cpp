@@ -10,7 +10,6 @@
 
 using namespace mfem;
 
-
 int main(int argc, char *argv[])
 {
 
@@ -23,44 +22,62 @@ int main(int argc, char *argv[])
     Mesh mesh(mesh_file,1,1);
     mesh.UniformRefinement();
     mesh.UniformRefinement();
-    // mesh.UniformRefinement();
 
-    // Fonction source (Courant dans la bobine sous forme de condition aux limites)
-    real_t f = 2000e3;
-    real_t I_rms = 0.082/sqrt(2);
-    int nb_period = 6;
-    int nb_iter = 100 * nb_period;
-    real_t Ts = nb_period/f/nb_iter;
-
+    // Time sumlation settings
+    real_t f = 100e3;                   // Frequency of the signal 
+    real_t I_rms = 0.082/sqrt(2);       // RMS Value
+    int nb_period = 5;                  // Number of period simulated
+    int nb_iter = 100 * nb_period;      // 100 time iterations for each period
+    real_t Ts = nb_period/f/nb_iter;    
     real_t t_f = nb_period/f;
+
+    // -------- Different source functions for the current------------
+
+    // Simple sine wave
     auto NI_sine_func = [&](real_t t) 
     {
         return I_rms * std::sqrt(2) * std::sin(2 * M_PI * f * t);
     };
 
-    auto NI_saw_pos_func = [&](real_t t) 
-    {
-        int iter = int(t/Ts);
-        int rest = iter%((int)(nb_iter/nb_period));
-
-        return I_rms * std::sqrt(2) * rest * Ts;
-    };  
-
+    // Saw wave form
     auto NI_saw_func = [&](real_t t) 
     {
         int iter = int(t/Ts);
         int rest = iter%((int)(nb_iter/nb_period));
+        return I_rms * std::sqrt(2) * rest * Ts;
+    };  
 
+    // Triangle waveform
+    auto NI_triangle_func = [&](real_t t) 
+    {
+        int iter = int((t + 0.25/f)/Ts);
+        int rest = iter%((int)(nb_iter/nb_period));
+        real_t Ipeak = I_rms * sqrt(3);
         if (rest < nb_iter/nb_period/2)
-            return I_rms * std::sqrt(2) * rest * Ts;
+            return 2 * Ipeak * rest/(nb_iter/nb_period/2) - Ipeak;
         else
-            return I_rms * std::sqrt(2) * (nb_iter/nb_period - rest) * Ts;
+            return - 2 * Ipeak * rest/(nb_iter/nb_period/2) + 3* Ipeak;
     };
+    // ----------------------------------------------------------------
 
-    // TD_sim_offline(mesh, NI_sine_func, t_f, nb_iter, N30, false, false);
-    // std::cout << "test" << std::endl;
-    TD_sim_online(mesh, NI_sine_func, t_f, nb_iter, N30, false);
+    // ---------- Initializing MPI -----------
+    Mpi::Init();
+    int num_procs = Mpi::WorldSize();
+    int myid = Mpi::WorldRank();
+    Hypre::Init();
 
+    ParMesh pmesh(MPI_COMM_WORLD, mesh);
+    mesh.Clear();
+    // ---------------------------------------
+    
+
+    // Offline simulation : Full FEM simulation, used for generating the snapshots for the reduced model 
+    TD_sim_offline(pmesh, NI_saw_func, t_f, nb_iter, N30, false, false, num_procs, myid);
+    
+    // Online simulation : Uses the snaphots generated to generate the reduced space.
+    TD_sim_online(pmesh, NI_saw_func, t_f, nb_iter, N30, false, num_procs, myid);
+    
+    Mpi::Finalize();
     return 0;
 }
 

@@ -14,11 +14,55 @@ using namespace mfem;
 #define M_PI 3.14159265358979323846 
 #endif
 
+/**
+ * @brief Time-domain electromagnetic simulation with snapshot generation for model order reduction.
+ *
+ * This function performs a time-domain finite element simulation of the electromagnetic response 
+ * of a 2D axisymmetric structure (in cylindrical coordinates) using a parallel mesh `pmesh`.
+ * It models the evolution of the magnetic and electric fields in a ferrite material, 
+ * applying discrete-time Z-transform formulations and finite element discretization in space.
+ *
+ * The function computes:
+ *  - Magnetic field H and its time evolution.
+ *  - Magnetic flux density B.
+ *  - Electric field E, derived from the current density J.
+ *  - Eddy current losses (power dissipation).
+ *
+ * It handles:
+ *  - Time-dependent Dirichlet boundary conditions driven by the input excitation `NI_func`.
+ *  - Optional real-time visualization using GLVis.
+ *  - Optional snapshot saving (for reduced-order modeling with libROM).
+ *
+ * @param pmesh           Parallel finite element mesh of the geometry.
+ * @param NI_func         Time-dependent excitation function (e.g., NI(t)).
+ * @param t_f             Final simulation time.
+ * @param num_steps       Number of time steps.
+ * @param ferrite         Material properties (rho, mu, sigma, epsilon).
+ * @param visualization   Enable real-time visualization (GLVis) if true.
+ * @param save_snapshot   Enable saving field snapshots for model reduction if true.
+ * @param num_procs       Total number of MPI processes.
+ * @param myid            Rank of the current MPI process.
+ */
+void TD_sim_offline(ParMesh &pmesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization, bool save_snapshot, int num_procs, int myid);
 
-
-void TD_sim_offline(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization, bool save_snapshot);
-
-void TD_sim_online(Mesh &mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization);
+/**
+ * @brief Performs a reduced-order time-domain simulation of electromagnetic behavior in a ferrite component.
+ *
+ * This function simulates the magnetic and electric fields in a 2D axisymmetric ferrite structure using a reduced-order model (ROM) 
+ * based on snapshots obtained offline from the function above. It assembles reduced matrices, projects the problem into a reduced space, 
+ * and computes the magnetic field, electric field, current density, and power losses at each time step. 
+ * The results can be visualized and are written to a file for post-processing.
+ *
+ * @param pmesh         Parallel mesh representing the geometry.
+ * @param NI_func       Time-dependent source function (NI(t)).
+ * @param t_f           Final simulation time.
+ * @param num_steps     Number of time steps.
+ * @param ferrite       Material parameters of the ferrite (rho, mu, sigma, epsilon).
+ * @param visualization Flag to enable/disable visualization.
+ * @param num_procs     Number of MPI processes.
+ * @param myid          ID of the current MPI process.
+ */
+void TD_sim_online(ParMesh &pmesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization, int num_procs, int myid);
 
 
 /*
