@@ -1,0 +1,18 @@
+cmake_minimum_required(VERSION 3.10)
+
+project(MFEMExample)
+
+set(CMAKE_CXX_STANDARD 17)
+
+
+find_package(MFEM REQUIRED)
+add_executable(sim princeton_sim.cpp ../source/customcurl.cpp solver.cpp)
+
+target_include_directories(sim PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(sim mfem) 
+
+add_executable(main main.cpp ../source/customcurl.cpp solver.cpp)
+
+target_include_directories(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(main mfem) 
+
