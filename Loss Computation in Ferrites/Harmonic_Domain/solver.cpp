@@ -24,11 +24,9 @@ PowerLossCoefficient::PowerLossCoefficient(const FiniteElementSpace *fespace_, s
 real_t PowerLossCoefficient::Eval(ElementTransformation &T,
                                     const IntegrationPoint &ip)
 {
-    Vector x;               // Vector coordinates
-    T.Transform(ip, x);     // Get the global coordinates in vector x from integration point's coordinates in the element referential
     J_r.Eval(J_r_vect, T, ip);    // Get from J_r (Coefficient) the value at the point ip in J_r_vect
     J_i.Eval(J_i_vect, T, ip);    // same for imaginary part
-    return  (J_r_vect * J_r_vect + J_i_vect * J_i_vect) * rho_eq.real() * x[0];  // Re(rho) * J² * r (Cylindrical coordinates)
+    return  (J_r_vect * J_r_vect + J_i_vect * J_i_vect) * rho_eq.real();  // Re(rho) * J² * r (Cylindrical coordinates)
 }
 
 
@@ -40,16 +38,15 @@ PowerLossMagCoefficient::PowerLossMagCoefficient(const FiniteElementSpace *fespa
 real_t PowerLossMagCoefficient::Eval(ElementTransformation &T,
                                     const IntegrationPoint &ip)
 {
-    Vector x;               // Vector coordinates
-    T.Transform(ip, x);     // Get the global coordinates in vector x from integration point's coordinates in the element referential
+
     std::complex<real_t> h(H_r.Eval(T, ip),H_i.Eval(T, ip));
-    return -(omega * std::imag(mu_eq) * pow(std::abs(h), 2) * x[0]);  
+    return -(omega * std::imag(mu_eq) * pow(std::abs(h), 2));  
 }
 
 
 
 // Function for computing the power loss (by eddy currents)
-void GetPowerLoss(Mesh *mesh, real_t f, real_t Bpeak, Ferrite ferrite, GeometryFerrite Geom, real_t &P_loss_eddy, real_t &P_loss_mag, std::complex<real_t> &flux, const bool visualization) {
+void GetPowerLoss(Mesh *mesh, real_t f, real_t Bpeak, real_t &NI, Ferrite ferrite, real_t &P_loss_eddy, real_t &P_loss_mag, std::complex<real_t> &flux, const bool visualization) {
 
     // ---------------- Material Properties --------------
     real_t rho = ferrite.rho;
@@ -60,14 +57,6 @@ void GetPowerLoss(Mesh *mesh, real_t f, real_t Bpeak, Ferrite ferrite, GeometryF
     real_t fc_mu = ferrite.fc;
     real_t tau = 1./(2.*M_PI*fc_mu);    // cutoff frequency of µ_eq = µ0µr/(1 + tau*j*w) model
 
-    // --------------- Geometric parameters --------------
-    real_t Ri = Geom.Ri;
-    real_t height = Geom.height;
-    real_t w = Geom.width;
-    real_t Rout = Geom.Rout;
-    real_t section = Geom.section;
-    real_t vol = Geom.vol;
-
     
     // --------------- Complex values coefficients --------
     real_t omega = 2*M_PI*f;
@@ -77,9 +66,10 @@ void GetPowerLoss(Mesh *mesh, real_t f, real_t Bpeak, Ferrite ferrite, GeometryF
     const std::complex<real_t> mu_eq = mu / ((real_t)1. + tau * j * omega);
     const std::complex<real_t> j_omega_mu = j*omega*mu_eq;
 
+    std::cout << "|rho| = " << std::abs(rho_eq) << std::endl;
     // The value of the source NI is initialized to 1. As the problem is linear, we can later rescale the solution.
     // We are doing such a thing because the actual source is the magnetic flux, but we don't know the corresponding current
-    real_t NI = 1.;
+    NI = 1;
 
     // Boundary conditions function
     auto bdr_func = [NI](const Vector &x)
@@ -238,12 +228,13 @@ void GetPowerLoss(Mesh *mesh, real_t f, real_t Bpeak, Ferrite ferrite, GeometryF
 
     real_t flux_abs = std::abs(flux);
 
-    // Computing the corrective term to have the desired magnetic flux
-    real_t B_rms;
-    B_rms = flux_abs / section;
+    GridFunction B_average(fespace);    // Constant GridFunction containing the average targeted value of B
+    B_average = Bpeak/sqrt(2);          // Working with RMS values
+
+    real_t targeted_flux = lf_flux(B_average);
 
     real_t coeff_correction;
-    coeff_correction = Bpeak/sqrt(2) / B_rms;
+    coeff_correction = targeted_flux / flux_abs;
 
     // Adjusting h values such that the magnetic flux is equal to the desired value
     h_r *= coeff_correction;
@@ -252,13 +243,11 @@ void GetPowerLoss(Mesh *mesh, real_t f, real_t Bpeak, Ferrite ferrite, GeometryF
     // Computing the coresponding NI 
     NI *= coeff_correction; // RMS value
     flux *= coeff_correction;
-    B_rms *= coeff_correction;
 
-    // std::cout << "Brms post-processing = " << B_rms << ", B_peak post-processing = " << B_rms*sqrt(2) << std::endl;
-    // std::cout << "Terme correctif : " << coeff_correction << std::endl;
-    // std::cout << "NI (amplitude) = " << NI*sqrt(2) << std::endl;
-    // std::cout << "rho_eq = " << rho_eq.real() << " + j" << rho_eq.imag() << std::endl;
-    // std::cout << "mu_eq  = " << mu_eq.real() << " + j" << mu_eq.imag() << std::endl;
+
+    // std::cout << "Corrective factor : " << coeff_correction << std::endl;
+    // std::cout << "NI (peak value) = " << NI*sqrt(2) << std::endl;
+
 
 
     // ************* Eddy losses *****************
@@ -272,31 +261,34 @@ void GetPowerLoss(Mesh *mesh, real_t f, real_t Bpeak, Ferrite ferrite, GeometryF
     CurlCustomCoefficient curl_r_coeff(&h_r);
     CurlCustomCoefficient curl_i_coeff(&h_i);
 
-
-    // using the Coefficient curl(h), it is possible to compute the power loss density (Re(rho_eq) * (J_r² + J_i²) * r)
-    PowerLossCoefficient Power_loss_coef(fespace_P, rho_eq, curl_r_coeff, curl_i_coeff);
-
-    GridFunction ones_L2(fespace_P);
+    GridFunction ones_L2(fespace_P);  // GridFunction For the volume
     ones_L2 = 1;
-    // Integrating the power loss density
-    LinearForm lf_eddy(fespace_P);
-    lf_eddy.AddDomainIntegrator(new DomainLFIntegrator(Power_loss_coef));
-    lf_eddy.Assemble();
-    real_t P_loss_eddy_tot = 2*M_PI*lf_eddy(ones_L2); // Power in Watts
-    P_loss_eddy = P_loss_eddy_tot/vol;  // Average Power in W/m^3
 
-    // std::cout << "Ploss : " << P_loss_eddy_tot << std::endl;
+    // using the Coefficient curl(h), it is possible to compute the power loss density (Re(rho_eq) * (J_r² + J_i²))
+    PowerLossCoefficient Power_loss_coef(fespace_P, rho_eq, curl_r_coeff, curl_i_coeff);
+    GridFunction P_eddy(fespace_P);
+    P_eddy.ProjectCoefficient(Power_loss_coef);
+
+    // Integrating the power loss density
+    LinearForm lf_vol(fespace_P);
+    lf_vol.AddDomainIntegrator(new DomainLFIntegrator(r_coeff));
+    lf_vol.Assemble();
+
+    real_t vol = lf_vol(ones_L2);
+
+    P_loss_eddy = lf_vol(P_eddy)/vol; // Power in Watts / m^3
     
 
     // ************* Mag losses *****************
-    PowerLossMagCoefficient Power_loss_mag_coeff(fespace_E, mu_eq, omega, H_r_coeff, H_i_coeff);
-    LinearForm lf_mag(fespace);
-    lf_mag.AddDomainIntegrator(new DomainLFIntegrator(Power_loss_mag_coeff));
-    lf_mag.Assemble();
-    real_t P_loss_mag_tot = 2*M_PI*lf_mag(ones); // Power in Watts
-    P_loss_mag = P_loss_mag_tot/vol;
+    PowerLossMagCoefficient Power_loss_mag_coeff(fespace_P, mu_eq, omega, H_r_coeff, H_i_coeff);
+    GridFunction P_mag(fespace_P);
+    P_mag.ProjectCoefficient(Power_loss_mag_coeff);
+
+    P_loss_mag = lf_vol(P_mag)/vol; // Power in Watts / m^3
           
-    std::cout << "f = " << f << " Hz, " << "Ploss : " << P_loss_eddy + P_loss_mag << " W/m^3"<< std::endl;
+    // std::cout << "f = " << f << " Hz, " << "Ploss : " << P_loss_eddy + P_loss_mag << " W/m^3"<< std::endl;
+    // std::cout << "P_eddy = " << P_loss_eddy << " W/m^3"<< std::endl;
+    // std::cout << "P_mag = " << P_loss_mag << " W/m^3"<< std::endl;
     if (visualization){
 
         h_r *= sqrt(2); // Plotting peak values

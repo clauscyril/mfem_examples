@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
     Ferrite N87("N87", 4.24e-2, 1.48e-1, 2.68e-6, 2200, 1.8e6);
     Ferrite T38("T38", 4.04e-2, 1.07e1, 8.06e-6, 10000, 1.8e6);
 
-    const char *mesh_file = "../../../../mesh/square.msh";
+    const char *mesh_file = "../../../mesh/square.msh";
 
     Mesh mesh(mesh_file,1,1);
     mesh.UniformRefinement();
@@ -72,10 +72,10 @@ int main(int argc, char *argv[])
     
 
     // Offline simulation : Full FEM simulation, used for generating the snapshots for the reduced model 
-    TD_sim_offline(pmesh, NI_saw_func, t_f, nb_iter, N30, false, false, num_procs, myid);
+    TD_sim_offline(pmesh, NI_sine_func, t_f, nb_iter, N30, false, false, num_procs, myid);
     
     // Online simulation : Uses the snaphots generated to generate the reduced space.
-    TD_sim_online(pmesh, NI_saw_func, t_f, nb_iter, N30, false, num_procs, myid);
+    TD_sim_online(pmesh, NI_sine_func, t_f, nb_iter, N30, false, num_procs, myid);
     
     Mpi::Finalize();
     return 0;

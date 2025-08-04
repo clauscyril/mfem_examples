@@ -21,6 +21,9 @@ p_eddy_rom = data_rom["p_eddy"]
 
 power_error = abs(p_eddy_rom - p_eddy_fom)
 
+height = 7.59e-3
+w = 5.3e-3
+
 t = data_rom['t']
 NI = data_fom["NI"]
 
@@ -30,8 +33,8 @@ print(f"Power ROM reduced : {np.mean(p_eddy_rom[200:])}")
 plt.figure()
 
 # plt.plot(t, flux_rom, label="Flux Rom")
-plt.plot(t, flux_rom, label="Flux Rom reduced")
-plt.plot(t, flux_fom,"--", label="Flux FOM")
+plt.plot(t, flux_rom/w/height, label="Flux Rom reduced")
+plt.plot(t, flux_fom/w/height,"--", label="Flux FOM")
 plt.grid()
 plt.xlabel("Time (s)")
 plt.ylabel("Magnetic flux (Wb)")

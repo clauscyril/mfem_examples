@@ -3,6 +3,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
+
+
+
 height = 7.59e-3
 w = 5.3e-3
 b_peak = 10e-3

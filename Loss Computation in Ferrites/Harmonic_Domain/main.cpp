@@ -58,15 +58,14 @@ int main(int argc, char *argv[]){
         std::cout << "Invalid option for b_peak. Using b_peak = 10 mT" << std::endl;
     }
     
-    GeometryFerrite UNIPG_Geometry(9.6e-3/2.0, 9.6e-3/2.0 + 5.3e-3, 7.59e-3);
-    GeometryFerrite Princeton_Geometry(13.7e-3/2, 22.1e-3/2, 6.35e-3);         // R 22.1 x 13.7 x 6.35 (mm)
+
 
     // ********************************
     // // Path to csv files for saving results
     std::string name = "../data/MFEM/unipg_mfem";   // Path to csv file for python plot
     name += ferrite.name + "_" +b_option + ".csv";
     std::ofstream data_file(name);                          // ofstream for writing in the file
-    data_file << "fc;P_eddy;P_mag;P_tot;flux_r;flux_i\n";                    // Intialising the file with coluns names
+    data_file << "fc;P_eddy;P_mag;P_tot;flux_r;flux_i;NI\n";                    // Intialising the file with coluns names
 
     
     // Frequency range for the simulation
@@ -80,14 +79,15 @@ int main(int argc, char *argv[]){
     real_t u_end = log(f_end);
     real_t delta_u = (u_end - u)/ N; 
 
-    real_t fc_mu = 2.5e6;  // cutoff frequency of µeq = µ0 µr / (1 + jw/wc) with wc = 2 pi fc
+    // real_t fc_mu = 2.5e6;  // cutoff frequency of µeq = µ0 µr / (1 + jw/wc) with wc = 2 pi fc
 
     for (int i = 0; i < N + 1; i++) {    // Looping the differents frequencies
-        f = exp(u + i*delta_u);                            // Frequency for the simulation (from the change of variable)
+        f = exp(u + i*delta_u);          // Frequency for the simulation (from the change of variable)
         real_t PLoss_eddy, PLoss_mag;
-        std::complex<real_t> flux(0,0);                                // parameters to be computed (will be passed as reference)
-        GetPowerLoss(mesh, f, b_peak, ferrite, UNIPG_Geometry, PLoss_eddy, PLoss_mag, flux, false);   // Calling the functions that computes the power losses
-        data_file << f << ";" << PLoss_eddy << ";" << PLoss_mag << ";" << PLoss_eddy + PLoss_mag << ";" << flux.real() << ";" << flux.imag() << std::endl; // Writing the results in the csv file
+        std::complex<real_t> flux(0,0);    
+        real_t NI=0;                            // parameters to be computed (will be passed as reference)
+        GetPowerLoss(mesh, f, b_peak, NI, ferrite, PLoss_eddy, PLoss_mag, flux, false);   // Calling the functions that computes the power losses
+        data_file << f << ";" << PLoss_eddy << ";" << PLoss_mag << ";" << PLoss_eddy + PLoss_mag << ";" << flux.real() << ";" << flux.imag() << ";"<< NI << std::endl; // Writing the results in the csv file
     }
 
 return 0;

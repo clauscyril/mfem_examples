@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 path = os.path.dirname(os.path.abspath(__file__))
-path = os.path.join(path, "build", "data", "TD_flux_1.csv")
+path = os.path.join(path, "build", "data", "TD_v_1.csv")
 
 
 height = 7.59e-3
@@ -15,11 +15,10 @@ data = pd.read_csv(path, sep=";")
 t = data["t"]
 p_eddy = data["p_eddy"]/1000
 flux = data["flux"]/w/height
-phi = data['phi_imposed']
+V = data['V_imposed']
 fluxH = data["fluxH"]/w/height
-phiH = data['phiH_imposed']
+sigmaV = data['simgaV']
 NI = data['NI']
-fem = data['fem']
 
 # p_eddy = np.array(p_eddy[500:])
 
@@ -30,12 +29,12 @@ w = 5.3e-3
 
 plt.figure()
 # plt.plot(t, flux, label='Flux de B mesuré ', color='blue')
-plt.plot(t, phi, label='Flux of B imposed', color='red', linestyle='--')
+plt.plot(t, V, label='V imposed', color='red', linestyle='--')
 plt.legend()
 plt.grid()
 plt.figure()
 # plt.plot(t, fluxH, label='Flux de H mesuré', color='blue')
-plt.plot(t, phiH, label='flux of H imposed', color='red', linestyle='--')
+plt.plot(t, sigmaV, label='sigma V', color='red', linestyle='--')
 plt.legend()
 plt.grid()
 # plt.figure()
@@ -72,13 +71,5 @@ plt.legend()
 # Titre et affichage
 plt.title("H and B (normalized)")
 plt.grid()
-
-
-plt.figure()
-plt.plot(t, fem, label='fem')
-plt.grid()
-plt.xlabel("Time (s)")
-plt.ylabel("Fem measured")
-plt.legend()
 plt.show()
 

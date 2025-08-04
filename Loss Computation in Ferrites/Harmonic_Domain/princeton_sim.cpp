@@ -38,20 +38,17 @@ void readCSV(std::string path, std::vector<std::vector<std::string>> &csvRows) {
 }
 
 int main(int argc, char *argv[]){        
-    const char *path = "../../mesh/square_Princeton.msh";
+    const char *path = "../../mesh/N30_P.msh";
     Mesh *mesh = new Mesh(path, 1,1);
+    mesh->UniformRefinement();
 
     std::string material = "N30";
-    Ferrite N30("N30", 5.98e-2, 4.44e-1, 2.48e-6, 4300, 1.2e6);
-    Ferrite N87("N87", 4.24e-2, 1.48e-1, 2.68e-6, 2200, 9e6);
+    Ferrite N30("N30", 5.98e-2, 4.44e-1, 2.48e-6, 4832, 1200e3);
+    Ferrite N87("N87", 4.24e-2, 1.48e-1, 2.68e-6, 2200, 4e6);
     Ferrite T38("T38", 4.04e-2, 1.07e1, 8.06e-6, 10000, 380e3);
     
     Ferrite ferrite = N30;
 
-    GeometryFerrite Princeton_Geometry_N30(13.7e-3/2, 22.1e-3/2, 6.35e-3);         // R 22.1 x 13.7 x 6.35 (mm)
-    GeometryFerrite Princeton_Geometry_N87(20.5e-3/2, 34.0e-3/2, 12.5e-3);         // R34.0X20.5X12.5
-
-    GeometryFerrite Geometry_used = Princeton_Geometry_N30;
     
     std::string path_data = "../data/Princeton/N30/N30-Sinusoidal_Phi_15.csv";
     OptionsParser args(argc, argv);
@@ -64,7 +61,6 @@ int main(int argc, char *argv[]){
         std::cout << "Using N30 ferrite." << std::endl;
     } else if(material==N87.name) {
         ferrite = N87;
-        Geometry_used = Princeton_Geometry_N87;
         std::cout << "Using N87 ferrite." << std::endl;
     } else if(material==T38.name) {
         ferrite = T38;
@@ -95,8 +91,9 @@ int main(int argc, char *argv[]){
 
         real_t PLoss_eddy, PLoss_mag;
         std::complex<real_t> flux(0,0);  
+        real_t NI = 0;
 
-        GetPowerLoss(mesh, f, b_peak, ferrite, Geometry_used, PLoss_eddy, PLoss_mag, flux, false); 
+        GetPowerLoss(mesh, f, b_peak, NI, ferrite, PLoss_eddy, PLoss_mag, flux, false); 
         data_file << f << ";" << PLoss_eddy << ";" << PLoss_mag << ";" << PLoss_eddy + PLoss_mag << ";" << flux.real() << ";" << flux.imag()  << std::endl;
     }   
 

@@ -8,6 +8,98 @@ using namespace mfem;
 #define M_PI 3.14159265358979323846 
 #endif
 
+
+void CustomCurlInterpolatorX::AssembleElementMatrix2(const FiniteElement &h1_fe,
+                            const FiniteElement &out_fe,
+                            ElementTransformation &Trans,
+                            DenseMatrix &elmat)
+{
+    const int dof = h1_fe.GetDof();         // Number of degrees of freedom inside the element with the input formulation (Here H1)
+    const int dof_out = out_fe.GetDof();    // Number of degrees of freedom inside the element with the output formulation (Here H1 too)
+    const int dim = out_fe.GetDim();        // Here dim is 2
+    DenseMatrix dshape(dof, dim);           // Matrix that will contain the gradient of each dofs. Size : dofs x dim
+    DenseMatrix dshapedxt(dof, dim);        // Same but in the physical domain. Size : dofs x dim
+    DenseMatrix invdfdx(dim, dim);          // Adjugate of the Jacobian of the change of variable between physical and element space
+    
+    elmat.SetSize(dof_out, dof);            // Local matrix of the contribution of the degrees of freedom. Size : dof_out x dof
+
+    for (int i = 0; i < dof_out; i++)       // Looping the gradient of the shape functions at the coordinates of the dof i  
+    {
+        const IntegrationPoint &ip = out_fe.GetNodes().IntPoint(i);
+        Trans.SetIntPoint(&ip);
+
+        Vector phys(Trans.GetSpaceDim());      // (x,y) in the element's reference
+        Trans.Transform(ip, phys);             // phys = (r,z) of the physical space 
+        h1_fe.CalcDShape(ip, dshape);          // Gradient of all shape function of the element in the element's space
+        CalcAdjugate(Trans.Jacobian(), invdfdx); 
+        Mult(dshape, invdfdx, dshapedxt);      // Computing the gradient in the physical space
+
+        real_t w = 1.;      
+        // H1 space (not weighted by the volume of the element), thus it is necessary to remove the weihting of the volume of the element
+        if (out_fe.GetMapType() == FiniteElement::VALUE)  
+        {
+            Trans.SetIntPoint(&ip); 
+            w /= Trans.Weight();  
+        }
+
+        for (int j = 0; j < dof; j++)   
+        {
+            // If the dof has not been computed yet by an other element, we apply the value -dh/dz, else 0, to avoid cumulative effect
+            // A better approach would be to compute the average of the contributions of the differents elements on one dof and not only one
+            elmat(i, j) = (set.find(phys(0)+ 10000* phys(1)) != set.end() ? 0 : -dshapedxt(j, 1) * w);
+        }
+        // Very simple and naive "hash function". Could be improved to guarantee the unicity
+        // Here it is working as the sizes of the elements are "big enough" 
+        set.insert(phys(0)+ 10000* phys(1));  // Add the 'dof' to the set
+    }
+}
+
+
+void CustomCurlInterpolatorY::AssembleElementMatrix2(const FiniteElement &h1_fe,
+                            const FiniteElement &out_fe,
+                            ElementTransformation &Trans,
+                            DenseMatrix &elmat)
+{
+    const int dof = h1_fe.GetDof();         // Number of degrees of freedom inside the element with the input formulation (Here H1)
+    const int dof_out = out_fe.GetDof();    // Number of degrees of freedom inside the element with the output formulation (Here H1 too)
+    const int dim = out_fe.GetDim();        // Here dim is 2
+    DenseMatrix dshape(dof, dim);           // Matrix that will contain the gradient of each dofs. Size : dofs x dim
+    DenseMatrix dshapedxt(dof, dim);        // Same but in the physical domain. Size : dofs x dim
+    DenseMatrix invdfdx(dim, dim);          // Adjugate of the Jacobian of the change of variable between physical and element space
+    
+    elmat.SetSize(dof_out, dof);            // Local matrix of the contribution of the degrees of freedom
+
+    for (int i = 0; i < dof_out; i++)       // Looping on every degree of freedom of the element
+    {
+        const IntegrationPoint &ip = h1_fe.GetNodes().IntPoint(i);
+        Trans.SetIntPoint(&ip);
+
+        Vector phys(Trans.GetSpaceDim());      // (x,y) in the element's reference
+        Trans.Transform(ip, phys);             // phys = (r,z) of the physical space 
+        h1_fe.CalcDShape(ip, dshape);          // Gradient of all shape function of the element in the element's space
+        CalcAdjugate(Trans.Jacobian(), invdfdx); 
+        Mult(dshape, invdfdx, dshapedxt);      // Computing the gradient in the physical space
+
+        real_t w = 1.; 
+        // H1 space (not weighted by the volume of the element), thus it is necessary to remove the weihting of the volume of the element
+        if (out_fe.GetMapType() == FiniteElement::VALUE)
+        {
+            Trans.SetIntPoint(&ip);
+            w /= Trans.Weight();
+        }
+        for (int j = 0; j < dof; j++)
+        {
+            // If the dof has not been computed yet by an other element, we apply the value -dh/dz, else 0, to avoid cumulative effect
+            // A better approach would be to compute the average of the contributions of the differents elements on one dof and not only one
+            elmat(i, j) = (set.find(phys(0)+ 10000* phys(1)) != set.end() ? 0 : (i==j ? dshapedxt(j, 0) * w + 1/phys(0) : dshapedxt(j, 0) * w));
+        }
+        // Very simple and naive "hash function". Could be improved to guarantee the unicity
+        // Here it is working as the sizes of the elements are "big enough"
+        set.insert(phys(0)+ 10000* phys(1)); // Add the 'dof' to the set
+    }
+}
+
+
 void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
 
     real_t Ts = t_f/(num_steps);
@@ -208,7 +300,18 @@ void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
     // File for saving the values of the power and flux for each iterations
     std::string name = "./data/TD_" + std::to_string(1) + ".csv";   
     std::ofstream data_file(name);                         
-    data_file << "t;p_eddy;flux;NI;fluxH;phiH\n0;0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
+    data_file << "t;p_eddy;p_exc;flux;NI;fluxH;phiH\n0;0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
+
+        // Linear Form the magnetic flux : lf_flux^T . Bn = intergral of Bn = phi_n
+    ConstantCoefficient ones(1.);
+    LinearForm lf_flux(fespace);
+    lf_flux.AddDomainIntegrator(new DomainLFIntegrator(ones));
+    lf_flux.Assemble();
+
+    // Linear Form the power losses: lf_p^T . Pn = integral of Pn
+    LinearForm lf_p(fespace);
+    lf_p.AddDomainIntegrator(new DomainLFIntegrator(ones));
+    lf_p.Assemble();
 
 
     int vis_steps = 1;  // Number of iterations between two visualizations
@@ -281,22 +384,8 @@ void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
         Bnm1 = Bn;          // Same for Bn
 
         // ***** computation of magnetic flux ***********
-        GridFunctionCoefficient B_coeff(&Bn);
-        GridFunction one(fespace);
-        one = 1;
-        LinearForm lf_flux(fespace);
-        lf_flux.AddDomainIntegrator(new DomainLFIntegrator(B_coeff));
-        lf_flux.Assemble();
-
-        real_t flux = lf_flux(one);
-
-
-        GridFunctionCoefficient H_coeff(&Hn);
-        LinearForm lf_fluxH(fespace);
-        lf_fluxH.AddDomainIntegrator(new DomainLFIntegrator(H_coeff));
-        lf_fluxH.Assemble();
-
-        real_t fluxH = lf_fluxH(one);
+        real_t flux = lf_flux(Bn);
+        real_t fluxH = lf_flux(Hn);
 
         phi_n = flux;
         phiH_n = 1/C1*(phi_n - C2*phiH_nm1 - C3*phi_nm1);
@@ -322,17 +411,26 @@ void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
 
         VectorGridFunctionCoefficient E_coeff(&En);
         PowerLossCoefficient_TD P_eddy_coeff(fespace_E, J_coeff, E_coeff);
-        LinearForm lf(fespace);
-        lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
-        lf.Assemble();
-        real_t P_eddy_tot = 2*M_PI*lf(one);
+        Pn.ProjectCoefficient(P_eddy_coeff);
+        real_t P_eddy_tot = 2*M_PI*lf_p(Pn);  // Losses on the volume
         real_t vol = M_PI * height * (Rout*Rout - Ri*Ri);
-        real_t P_eddy = P_eddy_tot/vol;
+        real_t P_eddy = P_eddy_tot/vol;       // Average power density
 
         Pn.ProjectCoefficient(P_eddy_coeff);
 
+        GridFunction one(fespace);
+        one = 1.;
+        GridFunctionCoefficient H_coeff(&Hn);
+        GridFunctionCoefficient dB_dt_coeff(&db_dt);
+        ProductCoefficient HdB_dt(H_coeff, dB_dt_coeff);
+        ProductCoefficient r_HdB_dt(HdB_dt, r_coeff);
+        LinearForm lf_exc(fespace);
+        lf_exc.AddDomainIntegrator(new DomainLFIntegrator(r_HdB_dt));
+        lf_exc.Assemble();
+        real_t P_exc = 2*M_PI*lf_exc(one);
+        P_exc /= vol;
 
-        data_file << t << ";" << P_eddy << ";" << flux << ";" << NI_func(t) <<  ";" << fluxH << ";" << phiH_n <<  std::endl;
+        data_file << t << ";" << P_eddy << ";" << P_exc << ";" << flux << ";" << NI_func(t) <<  ";" << fluxH << ";" << phiH_n <<  std::endl;
 
         // Visualisation avec GLVis
         if (step % vis_steps == 0 )
@@ -360,7 +458,7 @@ void TD_sim(Mesh *mesh, const std::function<real_t(real_t)> &NI_func, real_t t_f
 }
 
 
-void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
+void TD_sim_by_flux(Mesh *mesh, const Array<real_t> flux_array, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
 
     
     real_t Ts = t_f/(num_steps);
@@ -431,6 +529,9 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
 
     GridFunction En(fespace_E);
     GridFunction Enm1(fespace_E);
+
+    GridFunction Enx(fespace);
+    GridFunction Eny(fespace);
 
     GridFunction Jn(fespace_E);
     GridFunction Jnm1(fespace_E);
@@ -580,7 +681,7 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
     // File for saving the values of the power and flux for each iterations
     std::string name = "./data/TD_flux_" + std::to_string(1) + ".csv";   
     std::ofstream data_file(name);                         
-    data_file << "t;p_eddy;flux;phi_imposed;fluxH;phiH_imposed;NI\n0;0;0;0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
+    data_file << "t;p_eddy;flux;phi_imposed;fluxH;phiH_imposed;NI;fem\n0;0;0;0;0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
     
     std::string name_test = "./mat.txt";   
     std::ofstream data_file_test(name_test); 
@@ -608,7 +709,7 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         t += Ts;                    // New time 
 
 
-        phi_n = flux_func(t);
+        phi_n = flux_array[step];
         // phiH_n = 1/C1*(phi_n - C2 * phiH_nm1 - C3*phi_nm1);
         phiH_n = 1/D1 * (phi_n - D3 * phi_nm1);
         phiH_nm1 = phiH_n;
@@ -680,6 +781,7 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         }
         A_final.Add(n,n+1,-1);
         A_final.Add(n+1,n+1,1);
+        // A_final.Add(n,n, -100);
         A_final.Finalize();
         F2(n) = 0;
         F2(n+1) = phiH_n;
@@ -802,7 +904,1116 @@ void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, 
         Pn.ProjectCoefficient(P_eddy_coeff);
 
 
-        data_file << t << ";" << P_eddy << ";" << flux << ";" << phi_n << ";" << fluxH<< ";" << phiH_n << ";" << NI <<std::endl;
+        real_t i;
+        LinearForm lf_i(fespace_E);
+        Vector one_vec(2);
+        one_vec = 1.;
+        VectorConstantCoefficient one_coeff(one_vec);
+        lf_i.AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(one_coeff), dir_bdr);
+        lf_i.Assemble();
+        i = lf_i(Jn);
+
+
+        // for (int i = 0; i<Hn.Size(); i++) {
+        //     Enx(i) = En(i);
+        //     Eny(i) = En(Hn.Size() + i);
+        // }
+
+        LinearForm lf_fem(fespace_E);
+        lf_fem.AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(one_coeff), dir_bdr);
+        lf_fem.Assemble();
+        real_t fem = lf_fem(En);
+
+        data_file << t << ";" << P_eddy << ";" << flux << ";" << phi_n << ";" << fluxH<< ";" << phiH_n << ";" << NI << ";" << fem << std::endl;
+
+        // Visualisation avec GLVis
+        if (step % vis_steps == 0 )
+        {
+            std::cout << "Time step: " << step << ", Time: " << t << std::endl;
+
+            if (visualization)
+            {
+                sout.precision(8);
+                sout << "solution\n"
+                     << *mesh << Hn
+                     << "window_title 'Champ H'"
+                     << std::flush;
+                sout_e << "solution\n" << *mesh << En <<  "window_title 'Champ E'" << std::flush;
+                sout_j << "solution\n" << *mesh << Jn <<  "window_title 'Courant J'" << std::flush;
+                sout_b << "solution\n" << *mesh << Bn <<  "window_title 'Field B'" << std::flush;
+
+                // std::cin.get(); // Décommenter pour pause manuelle
+            }
+        }
+        // std::cin.get();
+    }
+    data_file.close();
+
+}
+
+
+void TD_sim_by_flux(Mesh *mesh, const std::function<real_t(real_t)> &flux_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
+    Array<real_t> flux_array(num_steps);
+    real_t Ts = t_f/(num_steps);
+    for (int i = 0; i<num_steps; i++) {
+        flux_array[i] = flux_func(Ts * i);
+    }
+    TD_sim_by_flux(mesh, flux_array, t_f, num_steps, ferrite, false);
+}
+
+void TD_sim_by_fluxH(Mesh *mesh, const Array<real_t> flux_array, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
+
+    
+    real_t Ts = t_f/(num_steps);
+
+
+    // geometric parameters
+    real_t Ri = 9.6e-3/2.0;
+    real_t height = 7.59e-3;
+    real_t w = 5.3e-3;
+    real_t Rout = Ri + w;
+    real_t Rm = (Rout - Ri) / 2;
+    int iter = 0;
+
+    // ****** Ferrite parameters ******
+    real_t rho = ferrite.rho;
+    real_t sigma = ferrite.sigma;
+    real_t eps = ferrite.eps;
+    real_t mu = ferrite.mu; 
+    
+    real_t tau = 1/(2 * M_PI * 1.8e6);
+
+    // int num_steps = 1000;
+    real_t t = 0.0;
+
+    real_t A1 = (rho * (sigma * Ts + 2*eps) + Ts)/(2*eps + Ts*sigma);
+    real_t A2 = (rho * (sigma * Ts - 2*eps) + Ts)/(2*eps + Ts*sigma);
+    real_t A3 = -(Ts*sigma -2*eps) / (2*eps + Ts*sigma);
+
+    real_t B1 = 2*mu / (Ts + 2*tau);
+    real_t B2 = -(2*mu) / (Ts + 2*tau);
+    real_t B3 = -(Ts - 2*tau) / (Ts + 2*tau);
+
+    real_t C1 = Ts*mu/(Ts+2*tau);
+    real_t C2 = Ts*mu/(Ts+2*tau);
+    real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
+
+    real_t D1 = Ts*mu/(Ts + tau);
+    real_t D3 = tau/(Ts+tau);
+
+    real_t NI = 0; // For now, initialized to 0;
+
+    // // Function used for the integration because of the cylindrical coordinates
+    auto r_coeff_func = [](const Vector &x){
+        return x[0];
+    };
+
+
+    // Function for the correcting factor rho/r² 
+    auto inv_r_square_func = [](const Vector &x){
+        return (real_t)1./pow(x[0],2);
+    };
+    
+    int order = 1;                      // elements order : 1
+    int dim = mesh->Dimension();        // Mesh dimension : 2
+
+    FiniteElementCollection *fec = new H1_FECollection(order, dim); 
+    FiniteElementSpace *fespace = new FiniteElementSpace(mesh, fec);
+
+    FiniteElementSpace *fespace_E = new FiniteElementSpace(mesh, fec, dim);
+
+    GridFunction Hn(fespace);     // H^n
+    GridFunction Hnm1(fespace);   // H^{n-1}
+    GridFunction db_dt(fespace);
+    GridFunction db_dtm1(fespace);
+
+    GridFunction Bn(fespace);
+    GridFunction Bnm1(fespace);
+
+    GridFunction En(fespace_E);
+    GridFunction Enm1(fespace_E);
+
+    GridFunction Enx(fespace);
+    GridFunction Eny(fespace);
+
+    GridFunction Jn(fespace_E);
+    GridFunction Jnm1(fespace_E);
+    // CurlCustomCoefficient *curl_H_coeff = new CurlCustomCoefficient(&Hn);
+
+    GridFunction Pn(fespace);
+
+    real_t phi_n = 0;
+    real_t phi_nm1 = 0;
+    real_t phiH_n = 0;
+    real_t phiH_nm1 = 0;
+
+    // Initializing all values to 0
+    Hn = 0;
+    Bn = 0;
+    Bnm1 = 0;
+    En = 0;
+    Jn = 0;
+    Jnm1 = 0;
+    Enm1 = 0;
+    Enm1 = 0;
+
+    Hnm1 = 0;  
+    db_dt = 0;
+
+    // Definition of the Boundary conditions  :
+    Array<int> ess_tdof_list;
+    Array<int> ess_tdof_list_2;
+    Array<int> dir_bdr(mesh->bdr_attributes.Max());
+    dir_bdr = 1; // No boundary conditions
+    Array<int> dir_bdr_2(mesh->bdr_attributes.Max());
+    dir_bdr_2 = 0;
+    fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
+
+    // fespace->GetBoundaryTrueDofs(ess_tdof_list);
+
+    // **** Coefficients for bilinear forms ****
+    FunctionCoefficient r_coeff(r_coeff_func);
+    FunctionCoefficient inv_r_square_coeff(inv_r_square_func);
+
+    ConstantCoefficient A1_coeff(A1);
+    ProductCoefficient A1_r(A1_coeff, r_coeff);
+
+    ConstantCoefficient B1_coeff(B1);
+    ProductCoefficient B1_r(B1_coeff, r_coeff);
+
+    ProductCoefficient A1_r_inv(A1_r, inv_r_square_coeff);
+
+
+    ConstantCoefficient A2_coeff(-A2);
+    ProductCoefficient A2_r(A2_coeff, r_coeff);
+
+    ConstantCoefficient B2_coeff(-B2);
+    ProductCoefficient B2_r(B2_coeff, r_coeff);
+
+    ProductCoefficient A2_r_inv(A2_r, inv_r_square_coeff);
+
+    ConstantCoefficient k(-(B3-A3));
+    ProductCoefficient k_r(k, r_coeff);
+
+    ConstantCoefficient k2(1/M_PI/2);
+    ConstantCoefficient k3(2*M_PI);
+    ProductCoefficient inv_r(r_coeff, inv_r_square_coeff);
+    ProductCoefficient k_inv_r(k2,inv_r);
+    // **************************************************
+
+    // ******* Definition of Bilinear and Linear Forms ********
+    BilinearForm r1(fespace); 
+
+    // Array<int> robin_bdr_marker(mesh->bdr_attributes.Max());
+    // robin_bdr_marker = 1;
+    r1.AddDomainIntegrator(new DiffusionIntegrator(A1_r));
+    r1.AddDomainIntegrator(new MassIntegrator(B1_r));
+    r1.AddDomainIntegrator(new MassIntegrator(A1_r_inv));
+    // r1.AddBoundaryIntegrator(new MassIntegrator(k_inv_r));
+    r1.Assemble();
+
+    BilinearForm r2(fespace); 
+    r2.AddDomainIntegrator(new DiffusionIntegrator(A2_r));
+    r2.AddDomainIntegrator(new MassIntegrator(B2_r));
+    r2.AddDomainIntegrator(new MassIntegrator(A2_r_inv));
+    r2.Assemble();
+
+    BilinearForm m(fespace);
+    m.AddDomainIntegrator(new MassIntegrator(k_r));
+    m.Assemble();
+
+    r1.Finalize();
+    r2.Finalize();
+    m.Finalize();
+
+    LinearForm lf(fespace);
+    ConstantCoefficient one(1);
+    lf.AddDomainIntegrator(new DomainLFIntegrator(one));
+    lf.Assemble();
+
+    LinearForm lf2(fespace);
+    ProductCoefficient deux_pi_r(r_coeff, k3);
+    lf2.AddBoundaryIntegrator(new BoundaryLFIntegrator(deux_pi_r), dir_bdr);
+    // lf2.AddBouIntegrator(new BoundaryLFIntegrator(k_inv_r));
+    lf2.Assemble();
+    
+
+    Vector B_vect = lf;
+    Vector B_vect2 = lf2;
+
+    // std::cout << B_vect.Size() << " , " << B_vect2.Size() << std::endl; 
+
+    // Parameters for the linear system
+    SparseMatrix &A = r1.SpMat();
+    SparseMatrix &R2 = r2.SpMat();
+    SparseMatrix &M = m.SpMat();
+
+    Vector rhs(fespace->GetTrueVSize());
+    Vector R2Hnm1(fespace->GetTrueVSize());
+    Vector MdBdt(fespace->GetTrueVSize());
+
+    Vector x(fespace->GetTrueVSize()); // For defining the linear system, considering Dirichlet's bdc
+    UMFPackSolver solver;
+
+    // Sockets stream for showing the results using glvis (if visualization is set to true) 
+    socketstream sout;
+    socketstream sout_e;
+    socketstream sout_j;
+    socketstream sout_b;
+
+    char vishost[] = "localhost";
+    int visport = 19916;
+
+    if (visualization)  // Initialize the ploting of the results
+    {
+        sout.open(vishost, visport);
+        sout_e.open(vishost, visport);
+        sout_j.open(vishost, visport);
+        sout_b.open(vishost, visport);
+
+        sout.precision(8);
+        sout << "solution\n" << *mesh << Hn << "\nkeys j\n" << std::flush;
+        sout_e.precision(8);
+        sout_e << "solution\n" << *mesh << En << "\nkeys j\n" << std::flush;
+        sout_j.precision(8);
+        sout_j << "solution\n" << *mesh << Jn << "\nkeys j\n" << std::flush;
+        sout_b.precision(8);
+        sout_b << "solution\n" << *mesh << Bn << "\nkeys j\n" << std::flush;
+    }
+
+    // File for saving the values of the power and flux for each iterations
+    std::string name = "./data/TD_flux_" + std::to_string(1) + ".csv";   
+    std::ofstream data_file(name);                         
+    data_file << "t;p_eddy;flux;phi_imposed;fluxH;phiH_imposed;NI;fem\n0;0;0;0;0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
+    
+    std::string name_test = "./mat.txt";   
+    std::ofstream data_file_test(name_test); 
+    std::string name_F = "./F.txt";   
+    std::ofstream data_file_F(name_F); 
+    
+
+    // **** Fonction multipliée par NI
+    auto one_over_r = [](const Vector &x){
+        return -1./(2*M_PI*x[0]);
+    };
+    FunctionCoefficient b2_function(one_over_r);
+    GridFunction B2_Grid(fespace);
+    B2_Grid = 0;
+    B2_Grid.ProjectBdrCoefficient(b2_function, dir_bdr); 
+
+    
+    int vis_steps = 1;  // Number of iterations between two visualizations
+    // ***************  Time iterations *****************
+    for (int step = 0; step < num_steps; step++)
+    {   
+        iter++;
+
+        // std::cout << iter%100 << std::endl;
+        t += Ts;                    // New time 
+
+
+
+        // phiH_n = 1/C1*(phi_n - C2 * phiH_nm1 - C3*phi_nm1);
+        phiH_n = flux_array[step];
+        phi_n = C1*phiH_n + C2*phiH_nm1 + C3*phi_nm1;
+
+        // phiH_n = flux_func(t);
+        // phi_n = C1*phiH_n + C2*phiH_nm1 + C3*phi_nm1;
+
+
+        // std::cout << "Phi = " << phi_n << std::endl;
+        // std::cout << "B1 = " << B1 << std::endl;
+        // std::cout << "B2 = " << B2 << std::endl;
+        // std::cout << "B3 = " << B3 << std::endl;
+
+        
+
+        // Mult M * dBdt → MdBdt
+        m.Mult(db_dtm1, MdBdt);
+
+        // Mult R2 * Hnm1 → R2Hnm1
+        r2.Mult(Hnm1, R2Hnm1);
+
+        // RHS = R2Hnm1 + MdBdt = R2* * Hnm1 + M * dBnm1/dt
+        rhs = R2Hnm1;
+        rhs += MdBdt;
+
+        int n = A.Height();
+        SparseMatrix A_sys;
+        Vector X(n);
+        Vector F(n);
+        F = rhs;
+
+        // **** TEST Avec FormLinearSystem
+        for (int i = 0; i<ess_tdof_list.Size(); i++){
+            F(ess_tdof_list[i]) = 0;
+            A.EliminateRow(ess_tdof_list[i], SparseMatrix::DIAG_ONE);
+            // A_sys.EliminateRowColDiag(ess_tdof_list[i],1.);
+        }
+
+        SparseMatrix A_final(n+2, n+2);
+
+        const int* I = A.GetI();
+        const int* J = A.GetJ();
+        const double* Data = A.GetData();
+
+        for (int i = 0; i < n; i++)
+        {
+            int row_start = I[i];
+            int row_end   = I[i + 1];
+
+            for (int j = row_start; j < row_end; j++)
+            {
+                int col = J[j];
+                double val = Data[j];
+                A_final.Add(i, col, val);
+            }
+        }
+
+        Vector F2(n+2);
+        Vector X2(n+2);
+
+        for (int i = 0; i<n; i++) {
+            // A_final.Add(i, n, B_vect(i));
+            A_final.Add(n, i, B_vect(i));
+            A_final.Add(i, n, B2_Grid(i));
+            // A_final.Add(n+1, i, B_vect2(i));
+            F2(i) = F(i);
+        }
+        A_final.Add(n,n+1,-1);
+        A_final.Add(n+1,n+1,1);
+        // A_final.Add(n,n, -100);
+        A_final.Finalize();
+        F2(n) = 0;
+        F2(n+1) = phiH_n;
+
+
+        solver.SetOperator(A_final);
+        solver.Mult(F2,X2);
+
+
+        std::cout << "NI/2/PI/RI = " << X2(n)/2/M_PI/Ri << std::endl;
+        for (int i = 0; i<n; i++){
+            // std::cout << X(i)
+            X(i) = X2(i);
+            Hn(i) = X(i);
+            // std::cout << "dof : "<< i << " : " <<  X(i) << std::endl;
+        }
+        // r1.RecoverFEMSolution(X, rhs, Hn);
+        real_t NI = +X2(n);
+        
+        
+        // DSmoother *jacobi = new DSmoother(); // Diagonal smoother
+        // jacobi->SetOperator(A_sys);
+
+
+        // SchurConstrainedSolver augmented_solver(A_sys, Bmat_T2, solver);
+        // augmented_solver.SetRelTol(1e-15);
+        // augmented_solver.SetMaxIter(10000);
+        // Vector r(1);
+        // r(0) = phiH_n;
+        // Vector r2(2);
+        // r2(0) = phiH_n;
+        // r2(1) = 0;
+        // augmented_solver.SetOperator(A_sys);
+        // augmented_solver.SetConstraintRHS(r);
+        // // std::cout << "test34" << std::endl;
+        // // M.PrintMatlab(data_file_test);
+        // augmented_solver.Mult(F, X);
+
+
+       
+        // *** Update of GridFunctions from solution Hn ***
+
+        // Update of db_dt with : (db_dt)_n = B1*Hn + B2*Hn-1 + B3*(db_dt)_n-1
+        db_dtm1 *= B3;
+
+        GridFunction H_temp(fespace); // temporary GridFunction to avoid modifying Hn
+        H_temp = Hn;
+        H_temp *= B1;  // Hn*B1
+
+        Hnm1 *= B2;     // Hn-1 * B2
+
+        db_dt = 0;
+        db_dt += H_temp;
+        db_dt += Hnm1;
+        db_dt += db_dtm1;  // db_dt up to date
+
+        Hnm1 /= B2;         // Restoring Hnm1 and db_dtm1 for the update of Bn
+        db_dtm1 /= B3;
+        H_temp /= B1;
+    
+        // ***** Update of Bn ******
+        // Bn = C1 Hn + C2 Hnm1 + C3 Bnm1
+        H_temp *= C1;
+        Hnm1 *= C2;
+        Bnm1 *= C3;
+
+        Bn = H_temp;
+        Bn += Hnm1;
+        Bn += Bnm1; // Bn up to date
+
+        // Update of n-1 iterations 
+        Hnm1 = Hn;          // Storing Hn into Hn-1 for next iteration
+        db_dtm1 = db_dt;    // Same for db_dt
+        Bnm1 = Bn;          // Same for Bn
+
+        phiH_nm1 = phiH_n;
+        phi_nm1 = phi_n; 
+
+
+        // ***** computation of magnetic flux ***********
+        GridFunctionCoefficient B_coeff(&Bn);
+        GridFunction one(fespace);
+        one = 1;
+        LinearForm lf_flux(fespace);
+        lf_flux.AddDomainIntegrator(new DomainLFIntegrator(B_coeff));
+        lf_flux.Assemble();
+        real_t flux = lf_flux(one);   
+
+        GridFunctionCoefficient H_coeff(&Hn);
+        LinearForm lf_fluxH(fespace);
+        lf_fluxH.AddDomainIntegrator(new DomainLFIntegrator(H_coeff));
+        lf_fluxH.Assemble();
+
+        real_t fluxH = lf_fluxH(one);
+
+        // Computation of J and E
+        CurlCustomCoefficient J_coeff(&Hn);
+        Jn.ProjectCoefficient(J_coeff);  // Jn = curl(Hn)
+
+        GridFunction Jn_temp(fespace_E);
+        Jn_temp = Jn;
+        Jn_temp *=A1;
+        Jnm1 *= A2;
+        Enm1 *= A3;
+        En = 0;
+        En+=Jn_temp;
+        En+=Jnm1;
+        En+=Enm1;
+
+        Enm1 = En;
+        Jnm1 = Jn;
+
+        VectorGridFunctionCoefficient E_coeff(&En);
+        PowerLossCoefficient_TD P_eddy_coeff(fespace_E, J_coeff, E_coeff);
+        LinearForm lf(fespace);
+        lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
+        lf.Assemble();
+        real_t P_eddy_tot = 2*M_PI*lf(one);
+        real_t vol = M_PI * height * (Rout*Rout - Ri*Ri);
+        real_t P_eddy = P_eddy_tot/vol;
+
+        Pn.ProjectCoefficient(P_eddy_coeff);
+
+
+        real_t i;
+        LinearForm lf_i(fespace_E);
+        Vector one_vec(2);
+        one_vec = 1.;
+        VectorConstantCoefficient one_coeff(one_vec);
+        lf_i.AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(one_coeff), dir_bdr);
+        lf_i.Assemble();
+        i = lf_i(Jn);
+
+
+        // for (int i = 0; i<Hn.Size(); i++) {
+        //     Enx(i) = En(i);
+        //     Eny(i) = En(Hn.Size() + i);
+        // }
+
+        LinearForm lf_fem(fespace_E);
+        lf_fem.AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(one_coeff), dir_bdr);
+        lf_fem.Assemble();
+        real_t fem = lf_fem(En);
+
+        data_file << t << ";" << P_eddy << ";" << flux << ";" << phi_n << ";" << fluxH<< ";" << phiH_n << ";" << NI << ";" << fem << std::endl;
+
+        // Visualisation avec GLVis
+        if (step % vis_steps == 0 )
+        {
+            std::cout << "Time step: " << step << ", Time: " << t << std::endl;
+
+            if (visualization)
+            {
+                sout.precision(8);
+                sout << "solution\n"
+                     << *mesh << Hn
+                     << "window_title 'Champ H'"
+                     << std::flush;
+                sout_e << "solution\n" << *mesh << En <<  "window_title 'Champ E'" << std::flush;
+                sout_j << "solution\n" << *mesh << Jn <<  "window_title 'Courant J'" << std::flush;
+                sout_b << "solution\n" << *mesh << Bn <<  "window_title 'Field B'" << std::flush;
+
+                // std::cin.get(); // Décommenter pour pause manuelle
+            }
+        }
+        // std::cin.get();
+    }
+    data_file.close();
+
+}
+
+void TD_sim_by_fluxH(Mesh *mesh, const std::function<real_t(real_t)> &fluxH_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
+    Array<real_t> flux_H_array(num_steps);
+    real_t Ts = t_f/(num_steps);
+    for (int i = 0; i<num_steps; i++) {
+        flux_H_array[i] = fluxH_func(Ts * i);
+    }
+    TD_sim_by_fluxH(mesh, flux_H_array, t_f, num_steps, ferrite, false);
+}
+
+
+void TD_sim_by_v(Mesh *mesh, const std::function<real_t(real_t)> &v_func, real_t t_f, int num_steps, Ferrite ferrite, bool visualization){
+
+    
+    real_t Ts = t_f/(num_steps);
+
+    real_t R = 10;
+
+    // geometric parameters
+    real_t Ri = 9.6e-3/2.0;
+    real_t height = 7.59e-3;
+    real_t w = 5.3e-3;
+    real_t Rout = Ri + w;
+    real_t Rm = (Rout - Ri) / 2;
+    int iter = 0;
+
+    // ****** Ferrite parameters ******
+    real_t rho = ferrite.rho;
+    real_t sigma = ferrite.sigma;
+    real_t eps = ferrite.eps;
+    real_t mu = ferrite.mu; 
+    
+    real_t tau = 1/(2 * M_PI * 1.8e6);
+
+    // int num_steps = 1000;
+    real_t t = 0.0;
+
+    real_t A1 = (rho * (sigma * Ts + 2*eps) + Ts)/(2*eps + Ts*sigma);
+    real_t A2 = (rho * (sigma * Ts - 2*eps) + Ts)/(2*eps + Ts*sigma);
+    real_t A3 = -(Ts*sigma -2*eps) / (2*eps + Ts*sigma);
+
+    real_t B1 = 2*mu / (Ts + 2*tau);
+    real_t B2 = -(2*mu) / (Ts + 2*tau);
+    real_t B3 = -(Ts - 2*tau) / (Ts + 2*tau);
+
+    real_t C1 = Ts*mu/(Ts+2*tau);
+    real_t C2 = Ts*mu/(Ts+2*tau);
+    real_t C3 = -(Ts-2*tau)/(Ts+2*tau);
+
+    real_t D1 = Ts*mu/(Ts + tau);
+    real_t D3 = tau/(Ts+tau);
+
+    real_t NI = 0; // For now, initialized to 0;
+
+    // // Function used for the integration because of the cylindrical coordinates
+    auto r_coeff_func = [](const Vector &x){
+        return x[0];
+    };
+
+
+    // Function for the correcting factor rho/r² 
+    auto inv_r_square_func = [](const Vector &x){
+        return (real_t)1./pow(x[0],2);
+    };
+    
+    int order = 1;                      // elements order : 1
+    int dim = mesh->Dimension();        // Mesh dimension : 2
+
+    FiniteElementCollection *fec = new H1_FECollection(order, dim); 
+    FiniteElementSpace *fespace = new FiniteElementSpace(mesh, fec);
+
+    FiniteElementSpace *fespace_E = new FiniteElementSpace(mesh, fec, dim);
+
+    GridFunction Hn(fespace);     // H^n
+    GridFunction Hnm1(fespace);   // H^{n-1}
+    GridFunction db_dt(fespace);
+    GridFunction db_dtm1(fespace);
+
+    GridFunction Bn(fespace);
+    GridFunction Bnm1(fespace);
+
+    GridFunction En(fespace_E);
+    GridFunction Enm1(fespace_E);
+
+    GridFunction Jn(fespace_E);
+    GridFunction Jnm1(fespace_E);
+    // CurlCustomCoefficient *curl_H_coeff = new CurlCustomCoefficient(&Hn);
+
+    GridFunction Pn(fespace);
+
+    real_t Vn;
+    real_t Vnm1 = 0;
+    real_t sigma_Vn = 0;
+    real_t sigma_Vnm1 = 0;
+
+    real_t inm1 = 0;
+    real_t sinm1 = 0;
+    real_t sin = 0;
+
+    real_t N = 10;
+
+    // Initializing all values to 0
+    Hn = 0;
+    Bn = 0;
+    Bnm1 = 0;
+    En = 0;
+    Jn = 0;
+    Jnm1 = 0;
+    Enm1 = 0;
+    Enm1 = 0;
+
+    Hnm1 = 0;  
+    db_dt = 0;
+
+    // Definition of the Boundary conditions  :
+    Array<int> ess_tdof_list;
+    Array<int> ess_tdof_list_2;
+    Array<int> dir_bdr(mesh->bdr_attributes.Max());
+    dir_bdr = 1; // No boundary conditions
+    Array<int> dir_bdr_2(mesh->bdr_attributes.Max());
+    dir_bdr_2 = 0;
+    fespace->GetEssentialTrueDofs(dir_bdr, ess_tdof_list);
+
+    // fespace->GetBoundaryTrueDofs(ess_tdof_list);
+
+    // **** Coefficients for bilinear forms ****
+    FunctionCoefficient r_coeff(r_coeff_func);
+    FunctionCoefficient inv_r_square_coeff(inv_r_square_func);
+
+    ConstantCoefficient A1_coeff(A1);
+    ProductCoefficient A1_r(A1_coeff, r_coeff);
+
+    ConstantCoefficient B1_coeff(B1);
+    ProductCoefficient B1_r(B1_coeff, r_coeff);
+
+    ProductCoefficient A1_r_inv(A1_r, inv_r_square_coeff);
+
+
+    ConstantCoefficient A2_coeff(-A2);
+    ProductCoefficient A2_r(A2_coeff, r_coeff);
+
+    ConstantCoefficient B2_coeff(-B2);
+    ProductCoefficient B2_r(B2_coeff, r_coeff);
+
+    ProductCoefficient A2_r_inv(A2_r, inv_r_square_coeff);
+
+    ConstantCoefficient k(-(B3-A3));
+    ProductCoefficient k_r(k, r_coeff);
+
+    ConstantCoefficient k2(1/M_PI/2);
+    ConstantCoefficient k3(2*M_PI);
+    ProductCoefficient inv_r(r_coeff, inv_r_square_coeff);
+    ProductCoefficient k_inv_r(k2,inv_r);
+    // **************************************************
+
+    // ******* Definition of Bilinear and Linear Forms ********
+    BilinearForm r1(fespace); 
+
+    // Array<int> robin_bdr_marker(mesh->bdr_attributes.Max());
+    // robin_bdr_marker = 1;
+    r1.AddDomainIntegrator(new DiffusionIntegrator(A1_r));
+    r1.AddDomainIntegrator(new MassIntegrator(B1_r));
+    r1.AddDomainIntegrator(new MassIntegrator(A1_r_inv));
+    // r1.AddBoundaryIntegrator(new MassIntegrator(k_inv_r));
+    r1.Assemble();
+
+    BilinearForm r2(fespace); 
+    r2.AddDomainIntegrator(new DiffusionIntegrator(A2_r));
+    r2.AddDomainIntegrator(new MassIntegrator(B2_r));
+    r2.AddDomainIntegrator(new MassIntegrator(A2_r_inv));
+    r2.Assemble();
+
+    BilinearForm m(fespace);
+    m.AddDomainIntegrator(new MassIntegrator(k_r));
+    m.Assemble();
+
+    r1.Finalize();
+    r2.Finalize();
+    m.Finalize();
+
+    LinearForm lf(fespace);
+    ConstantCoefficient one(1);
+    lf.AddDomainIntegrator(new DomainLFIntegrator(one));
+    lf.Assemble();
+
+    LinearForm lf2(fespace);
+    ProductCoefficient deux_pi_r(r_coeff, k3);
+    lf2.AddBoundaryIntegrator(new BoundaryLFIntegrator(deux_pi_r), dir_bdr);
+    // lf2.AddBouIntegrator(new BoundaryLFIntegrator(k_inv_r));
+    lf2.Assemble();
+    
+
+    Vector B_vect = lf;
+    Vector B_vect2 = lf2;
+
+    // std::cout << B_vect.Size() << " , " << B_vect2.Size() << std::endl; 
+
+    // Parameters for the linear system
+    SparseMatrix &A = r1.SpMat();
+    SparseMatrix &R2 = r2.SpMat();
+    SparseMatrix &M = m.SpMat();
+
+    Vector rhs(fespace->GetTrueVSize());
+    Vector R2Hnm1(fespace->GetTrueVSize());
+    Vector MdBdt(fespace->GetTrueVSize());
+
+    Vector x(fespace->GetTrueVSize()); // For defining the linear system, considering Dirichlet's bdc
+    UMFPackSolver solver;
+
+    // Sockets stream for showing the results using glvis (if visualization is set to true) 
+    socketstream sout;
+    socketstream sout_e;
+    socketstream sout_j;
+    socketstream sout_b;
+
+    char vishost[] = "localhost";
+    int visport = 19916;
+
+    if (visualization)  // Initialize the ploting of the results
+    {
+        sout.open(vishost, visport);
+        sout_e.open(vishost, visport);
+        sout_j.open(vishost, visport);
+        sout_b.open(vishost, visport);
+
+        sout.precision(8);
+        sout << "solution\n" << *mesh << Hn << "\nkeys j\n" << std::flush;
+        sout_e.precision(8);
+        sout_e << "solution\n" << *mesh << En << "\nkeys j\n" << std::flush;
+        sout_j.precision(8);
+        sout_j << "solution\n" << *mesh << Jn << "\nkeys j\n" << std::flush;
+        sout_b.precision(8);
+        sout_b << "solution\n" << *mesh << Bn << "\nkeys j\n" << std::flush;
+    }
+
+    // File for saving the values of the power and flux for each iterations
+    std::string name = "./data/TD_v_" + std::to_string(1) + ".csv";   
+    std::ofstream data_file(name);                         
+    data_file << "t;p_eddy;flux;V_imposed;fluxH;simgaV;NI\n0;0;0;0;0;0;0\n";  // Intialising the file with coluns names and first values to 0
+    
+    std::string name_test = "./mat.txt";   
+    std::ofstream data_file_test(name_test); 
+    std::string name_F = "./F.txt";   
+    std::ofstream data_file_F(name_F); 
+    
+
+    // **** Fonction multipliée par NI
+    auto one_over_r = [](const Vector &x){
+        return -1./(2*M_PI*x[0]);
+    };
+    FunctionCoefficient b2_function(one_over_r);
+    GridFunction B2_Grid(fespace);
+    B2_Grid = 0;
+    B2_Grid.ProjectBdrCoefficient(b2_function, dir_bdr); 
+
+
+    Array<int> left_right_bdr(mesh->bdr_attributes.Max());
+    left_right_bdr = 0;
+    left_right_bdr[1] = 1, left_right_bdr[3] = 1;
+
+    Array<int> bottom_top_bdr(mesh->bdr_attributes.Max());
+    bottom_top_bdr = 0;
+    bottom_top_bdr[0] = 1, bottom_top_bdr[2] = 1;
+
+    DiscreteLinearOperator curlx(fespace, fespace);
+    curlx.AddDomainInterpolator(new CustomCurlInterpolatorX());
+    curlx.Assemble();
+    curlx.Finalize();
+
+    DiscreteLinearOperator curly(fespace, fespace);
+    curly.AddDomainInterpolator(new CustomCurlInterpolatorY());
+    curly.Assemble();
+    curly.Finalize();
+
+    LinearForm lf_circ_x(fespace);
+    lf_circ_x.AddBoundaryIntegrator(new BoundaryLFIntegrator(one), left_right_bdr);
+    lf_circ_x.Assemble();
+
+    LinearForm lf_circ_y(fespace);
+    lf_circ_y.AddBoundaryIntegrator(new BoundaryLFIntegrator(one), bottom_top_bdr);
+    lf_circ_y.Assemble();
+
+    Vector LCx(Hn.Size());
+    Vector LCy(Hn.Size());
+    Vector LC(Hn.Size());
+
+    curlx.MultTranspose(lf_circ_x, LCx);
+    curly.MultTranspose(lf_circ_y, LCy);
+
+    LC = LCx;
+    LC += LCy;    
+
+
+
+
+    
+    int vis_steps = 1;  // Number of iterations between two visualizations
+    // ***************  Time iterations *****************
+    for (int step = 0; step < num_steps; step++)
+    {   
+        iter++;
+
+        // std::cout << iter%100 << std::endl;
+        t += Ts;                    // New time 
+
+        Vn = v_func(t);
+        sigma_Vn = 1./A1 * (Vn - A3*Vnm1 - A2*sigma_Vnm1); 
+
+
+        // Vn = v_func(t);
+        // sigma_Vn = (A1*Vn + A2*Vnm1 + A3*sigma_Vnm1); 
+        // Vnm1 = Vn;
+        // sigma_Vnm1 = sigma_Vn;
+
+        // sigma_Vn = Vn/0.144; 
+        // phiH_n = flux_func(t);
+        // phi_n = C1*phiH_n + C2*phiH_nm1 + C3*phi_nm1;
+        // phiH_nm1 = phiH_n;
+        // phi_nm1 = phi_n; 
+
+        // std::cout << "Phi = " << phi_n << std::endl;
+        // std::cout << "B1 = " << B1 << std::endl;
+        // std::cout << "B2 = " << B2 << std::endl;
+        // std::cout << "B3 = " << B3 << std::endl;
+
+        
+
+        // Mult M * dBdt → MdBdt
+        m.Mult(db_dtm1, MdBdt);
+
+        // Mult R2 * Hnm1 → R2Hnm1
+        r2.Mult(Hnm1, R2Hnm1);
+
+        // RHS = R2Hnm1 + MdBdt = R2* * Hnm1 + M * dBnm1/dt
+        rhs = R2Hnm1;
+        rhs += MdBdt;
+
+        int n = A.Height();
+        SparseMatrix A_sys;
+        Vector X(n);
+        Vector F(n);
+        F = rhs;
+
+        // **** TEST Avec FormLinearSystem
+        for (int i = 0; i<ess_tdof_list.Size(); i++){
+            F(ess_tdof_list[i]) = 0;
+            A.EliminateRow(ess_tdof_list[i], SparseMatrix::DIAG_ONE);
+            // A_sys.EliminateRowColDiag(ess_tdof_list[i],1.);
+        }
+
+        // SparseMatrix A_final(n+3, n+3);
+        SparseMatrix A_final(n+2, n+2);
+
+        const int* I = A.GetI();
+        const int* J = A.GetJ();
+        const double* Data = A.GetData();
+
+        for (int i = 0; i < n; i++)
+        {
+            int row_start = I[i];
+            int row_end   = I[i + 1];
+
+            for (int j = row_start; j < row_end; j++)
+            {
+                int col = J[j];
+                double val = Data[j];
+                A_final.Add(i, col, val);
+            }
+        }
+
+        // Vector F2(n+3);
+        // Vector X2(n+3);
+
+        // for (int i = 0; i<n; i++) {
+        //     // A_final.Add(i, n, B_vect(i));
+        //     A_final.Add(n, i, LC(i));
+        //     A_final.Add(i, n, B2_Grid(i));
+        //     // A_final.Add(n+1, i, B_vect2(i));
+        //     F2(i) = F(i);
+        // }
+        // A_final.Add(n,n+1,-1);
+        // A_final.Add(n+1,n+1,1);
+        // A_final.Add(n+1,n+2, 0);
+        // A_final.Add(n+2,n, -1./(A1*N));
+        // A_final.Add(n+2,n+2,1);
+        // A_final.Finalize();
+        // F2(n) = 0;
+        // F2(n+1) = sigma_Vn;
+        // F2(n+2) = -1./A1 * (A3*inm1 + A2*sinm1);
+
+        // Vector F2(n+2);
+        // Vector X2(n+2);
+
+        // for (int i = 0; i<n; i++) {
+        //     // A_final.Add(i, n, B_vect(i));
+        //     A_final.Add(n, i, LC(i));
+        //     A_final.Add(i, n, B2_Grid(i));
+        //     // A_final.Add(n+1, i, B_vect2(i));
+        //     F2(i) = F(i);
+        // }
+        // A_final.Add(n,n+1,-1);
+        // A_final.Add(n+1,n+1,1);
+        // A_final.Add(n,n, 0);
+        // A_final.Finalize();
+        // F2(n) = 0;
+        // F2(n+1) = sigma_Vn;
+
+        
+        Vector F2(n+2);
+        Vector X2(n+2);
+
+        for (int i = 0; i<n; i++) {
+            // A_final.Add(i, n, B_vect(i));
+            A_final.Add(n, i, LC(i));
+            A_final.Add(i, n, B2_Grid(i));
+            // A_final.Add(n+1, i, B_vect2(i));
+            F2(i) = F(i);
+        }
+
+        // A_final.Add(n,n,-R/N/A1);
+        A_final.Add(n,n+1,-1/A1);
+        A_final.Add(n+1,n+1,1);
+        // A_final.Add(n,n, 0);
+        A_final.Finalize();
+        real_t circ_A2timescurl_Hnm1 = A2 * InnerProduct(LC,Hnm1);
+        // F2(n) = -1/A1*(circ_A2timescurl_Hnm1 + A3*R*inm1 + A3*Vnm1);
+        F2(n) = -1/A1*(circ_A2timescurl_Hnm1 + A3*Vnm1);
+
+        // F2(n+1) = -1./A1 * (Vn + circ_A2timescurl_Hnm1 - A3*Vnm1 + A3*R*inm1);
+        F2(n+1) = Vn;
+
+        solver.SetOperator(A_final);
+        solver.Mult(F2,X2);
+
+        std::cout << "NI/2/PI/RI = " << X2(n)/2/M_PI/Ri << std::endl;
+        for (int i = 0; i<n; i++){
+            // std::cout << X(i)
+            X(i) = X2(i);
+            Hn(i) = X(i);
+            // std::cout << "dof : "<< i << " : " <<  X(i) << std::endl;
+        }
+        // r1.RecoverFEMSolution(X, rhs, Hn);
+        real_t NI = +X2(n);
+        inm1 = NI/N;
+        Vnm1 = Vn;
+        // sinm1 = X2(n+2);
+        
+        
+        // DSmoother *jacobi = new DSmoother(); // Diagonal smoother
+        // jacobi->SetOperator(A_sys);
+
+
+        // SchurConstrainedSolver augmented_solver(A_sys, Bmat_T2, solver);
+        // augmented_solver.SetRelTol(1e-15);
+        // augmented_solver.SetMaxIter(10000);
+        // Vector r(1);
+        // r(0) = phiH_n;
+        // Vector r2(2);
+        // r2(0) = phiH_n;
+        // r2(1) = 0;
+        // augmented_solver.SetOperator(A_sys);
+        // augmented_solver.SetConstraintRHS(r);
+        // // std::cout << "test34" << std::endl;
+        // // M.PrintMatlab(data_file_test);
+        // augmented_solver.Mult(F, X);
+
+
+       
+        // *** Update of GridFunctions from solution Hn ***
+
+        // Update of db_dt with : (db_dt)_n = B1*Hn + B2*Hn-1 + B3*(db_dt)_n-1
+        db_dtm1 *= B3;
+
+        GridFunction H_temp(fespace); // temporary GridFunction to avoid modifying Hn
+        H_temp = Hn;
+        H_temp *= B1;  // Hn*B1
+
+        Hnm1 *= B2;     // Hn-1 * B2
+
+        db_dt = 0;
+        db_dt += H_temp;
+        db_dt += Hnm1;
+        db_dt += db_dtm1;  // db_dt up to date
+
+        Hnm1 /= B2;         // Restoring Hnm1 and db_dtm1 for the update of Bn
+        db_dtm1 /= B3;
+        H_temp /= B1;
+    
+        // ***** Update of Bn ******
+        // Bn = C1 Hn + C2 Hnm1 + C3 Bnm1
+        H_temp *= C1;
+        Hnm1 *= C2;
+        Bnm1 *= C3;
+
+        Bn = H_temp;
+        Bn += Hnm1;
+        Bn += Bnm1; // Bn up to date
+
+        // Update of n-1 iterations 
+        Hnm1 = Hn;          // Storing Hn into Hn-1 for next iteration
+        db_dtm1 = db_dt;    // Same for db_dt
+        Bnm1 = Bn;          // Same for Bn
+
+        Vnm1 = Vn;
+        sigma_Vnm1 = sigma_Vn;
+
+        // ***** computation of magnetic flux ***********
+        GridFunctionCoefficient B_coeff(&Bn);
+        GridFunction one(fespace);
+        one = 1;
+        LinearForm lf_flux(fespace);
+        lf_flux.AddDomainIntegrator(new DomainLFIntegrator(B_coeff));
+        lf_flux.Assemble();
+        real_t flux = lf_flux(one);   
+
+        GridFunctionCoefficient H_coeff(&Hn);
+        LinearForm lf_fluxH(fespace);
+        lf_fluxH.AddDomainIntegrator(new DomainLFIntegrator(H_coeff));
+        lf_fluxH.Assemble();
+
+        real_t fluxH = lf_fluxH(one);
+
+        // Computation of J and E
+        CurlCustomCoefficient J_coeff(&Hn);
+        Jn.ProjectCoefficient(J_coeff);  // Jn = curl(Hn)
+
+        GridFunction Jn_temp(fespace_E);
+        Jn_temp = Jn;
+        Jn_temp *=A1;
+        Jnm1 *= A2;
+        Enm1 *= A3;
+        En = 0;
+        En+=Jn_temp;
+        En+=Jnm1;
+        En+=Enm1;
+
+        Enm1 = En;
+        Jnm1 = Jn;
+
+        VectorGridFunctionCoefficient E_coeff(&En);
+        PowerLossCoefficient_TD P_eddy_coeff(fespace_E, J_coeff, E_coeff);
+        LinearForm lf(fespace);
+        lf.AddDomainIntegrator(new DomainLFIntegrator(P_eddy_coeff));
+        lf.Assemble();
+        real_t P_eddy_tot = 2*M_PI*lf(one);
+        real_t vol = M_PI * height * (Rout*Rout - Ri*Ri);
+        real_t P_eddy = P_eddy_tot/vol;
+
+        Pn.ProjectCoefficient(P_eddy_coeff);
+
+
+        real_t i;
+        LinearForm lf_i(fespace_E);
+        Vector one_vec(2);
+        one_vec = 1.;
+        VectorConstantCoefficient one_coeff(one_vec);
+        lf_i.AddBoundaryIntegrator(new VectorBoundaryLFIntegrator(one_coeff), dir_bdr);
+        lf_i.Assemble();
+        i = lf_i(Jn);
+
+        data_file << t << ";" << P_eddy << ";" << flux << ";" << Vn << ";" << fluxH<< ";" << sigma_Vn << ";" << NI <<std::endl;
 
         // Visualisation avec GLVis
         if (step % vis_steps == 0 )
@@ -845,4 +2056,28 @@ real_t PowerLossCoefficient_TD::Eval(ElementTransformation &T,
     J.Eval(J_vect, T, ip);    // Get from J_r (Coefficient) the value at the point ip in J_r_vect
     E.Eval(E_vect, T, ip);    // same for E
     return  (J_vect*E_vect) * x[0];  // J.E * r (Cylindrical coordinates)
+}
+
+void readCSV(std::string path, std::vector<std::vector<std::string>> &csvRows) {
+  	std::ifstream input{path};
+
+	if (!input.is_open()) {
+		std::cerr << "Couldn't read file: " << path << "\n";
+		return; 
+	}
+
+	for (std::string line; std::getline(input, line);) {
+		std::istringstream ss(std::move(line));
+		std::vector<std::string> row;
+		if (!csvRows.empty()) {
+			// We expect each row to be as big as the first row
+			row.reserve(csvRows.front().size());
+		}
+
+		for (std::string value; std::getline(ss, value, ',');) {
+			row.push_back(std::move(value));
+		}
+		csvRows.push_back(std::move(row));
+	}
+	return;
 }

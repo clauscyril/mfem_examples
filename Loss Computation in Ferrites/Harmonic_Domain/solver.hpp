@@ -42,6 +42,6 @@ public:
 
 
 // Fonction qui calcule la puissance moyenne sur la surface (W/m^3)
-void GetPowerLoss(Mesh *mesh, real_t f, real_t Bpeak, Ferrite ferrite, GeometryFerrite Geom, real_t &P_loss_eddy, real_t &P_loss_mag, std::complex<real_t> &flux, const bool visualization);
+void GetPowerLoss(Mesh *mesh, real_t f, real_t Bpeak, real_t &NI, Ferrite ferrite, real_t &P_loss_eddy, real_t &P_loss_mag, std::complex<real_t> &flux, const bool visualization);
 
 #endif // SOLVERS_HPP

@@ -7,9 +7,14 @@ import matplotlib.pyplot as plt
 path = os.path.dirname(os.path.abspath(__file__))
 path = os.path.join(path, "build", "data", "TD_1.csv")
 
+height = 7.59e-3
+w = 5.3e-3
+print(10e-3*w*height)
+
 data = pd.read_csv(path, sep=";")
 t = data["t"]
 p_eddy = data["p_eddy"]/1000
+p_exc = data['p_exc']/1000
 flux = data["flux"]
 NI = data['NI']
 fluxH = data['fluxH']
@@ -23,7 +28,7 @@ phiH = data["phiH"]
 # p_eddy = np.array(p_eddy[500:])
 
 
-print(np.mean(p_eddy[2000:]))    
+print(np.mean(p_eddy[400:]) + np.mean(p_exc[400:]))    
 
 
 # plt.figure()
@@ -68,7 +73,8 @@ ax2.grid(True)
 plt.tight_layout()
 
 plt.figure()
-plt.plot(t,p_eddy, label="Power (400 kHz)")
+plt.plot(t,p_eddy, label="Power eddy")
+plt.plot(t,p_exc, label="Power exc")
 plt.grid()
 plt.legend()
 plt.xlabel("Time (s)")
