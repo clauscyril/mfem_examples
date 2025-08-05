@@ -33,7 +33,7 @@ int main(int argc, char *argv[]){
     mesh->UniformRefinement();
 
     
-    Ferrite N30("N30", 5.98e-2, 4.44e-1, 2.48e-6, 4300, 1.8e6);
+    Ferrite N30("N30", 5.98e-2, 4.44e-1, 2.48e-6, 5111, 2277.94e3);
     Ferrite N87("N87", 4.24e-2, 1.48e-1, 2.68e-6, 2200, 1.8e6);
     Ferrite T38("T38", 4.04e-2, 1.07e1, 8.06e-6, 10000, 380e3);
 

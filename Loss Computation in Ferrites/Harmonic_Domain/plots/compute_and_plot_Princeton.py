@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 data_path = os.path.join(path, "data", "Princeton")
 
-exec_cpp_code = False
+exec_cpp_code = True
 
 if exec_cpp_code:
     ### Executing c++ compiled program to compute the simulation
@@ -19,7 +19,7 @@ if exec_cpp_code:
     for dossier, sous_dossiers, fichiers in os.walk(data_path):
         for fichier in fichiers:
             mat = os.path.basename(fichier).split("-")[0]
-            if mat == 'N87' :
+            if mat == 'N30' :
                 full_path = os.path.join(dossier, fichier)
                 subprocess.run([exec_path, "-m", mat, "-p", full_path], cwd=path_prog, check=True) 
 

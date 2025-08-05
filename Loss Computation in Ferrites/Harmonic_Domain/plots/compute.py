@@ -20,7 +20,7 @@ flux_imag = []
 NI = []
 
 for f in f_list: 
-    exec = subprocess.run([exec_path, "-p", mesh_path, "-f", str(f), "-mat", "N30", "-b", "10"], capture_output=True, cwd=path_prog, check=True)
+    exec = subprocess.run([exec_path, "-p", mesh_path, "-f", str(f), "-mat", "N30", "-b", "15"], capture_output=True, cwd=path_prog, check=True)
 
     data = str(exec.stdout.strip()).replace("'", "").split('\\n')[-1].split(";")
 
@@ -31,8 +31,13 @@ for f in f_list:
     flux_imag.append(float(data[5]))
     NI.append(float(data[6]))
 
+data_p = pd.read_csv(os.path.join(path, "data", "Princeton/N30/N30-Sinusoidal_Phi_15.csv"))
+Power_P = data_p["Power_Loss"]
+Freq_P = data_p["Frequency"]
+
 plt.figure()
 plt.plot(f_list, P_tot)
+plt.plot(Freq_P, Power_P)
 plt.grid()
 plt.xlabel('f(Hz)')
 plt.ylabel('Total losses (W/m3)')
